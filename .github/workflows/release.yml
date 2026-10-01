@@ -23,8 +23,28 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - name: Test
-        run: go test ./...
+      - name: Validate release tag
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $VERSION" >&2
+            echo "Expected vMAJOR.MINOR.PATCH or a prerelease such as v0.2.0-rc.1" >&2
+            exit 1
+          fi
+          test -f cmd/routurn/main.go
+          sh scripts/release-notes.sh "$VERSION" >/tmp/release-notes.md
+
+      - name: Quality gate
+        run: |
+          set -euo pipefail
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test ./...
+          go build -o /tmp/routurn ./cmd/routurn
+          sh -n install.sh
+          sh -n scripts/release-notes.sh
 
       - name: Build release archives
         env:
@@ -63,16 +83,31 @@ jobs:
           build_windows amd64
           build_windows arm64
 
+          if [ "$(dist/work/linux_amd64/routurn -V)" != "$VERSION" ]; then
+            echo "built binary version does not match tag" >&2
+            exit 1
+          fi
+
+          cp /tmp/release-notes.md dist/release-notes.md
           cd dist
           sha256sum routurn_* > checksums.txt
 
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.ref_name }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
+          set -euo pipefail
+
+          release_kind="--latest"
+          case "$VERSION" in
+            *-*) release_kind="--prerelease" ;;
+          esac
+
+          gh release create "$VERSION" \
             dist/routurn_* \
             dist/checksums.txt \
             --verify-tag \
-            --title "${GITHUB_REF_NAME}" \
-            --generate-notes
+            --title "Routurn $VERSION" \
+            --notes-file dist/release-notes.md \
+            "$release_kind"

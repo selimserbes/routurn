@@ -17,6 +17,7 @@ go vet ./...
 go test ./...
 go build ./cmd/routurn
 sh -n install.sh
+sh -n scripts/release-notes.sh
 ```
 
 ## Pull requests
@@ -46,3 +47,19 @@ help             help command
 ```
 
 New commands should provide concise `Use`, `Short`, and helpful error messages, return non-zero exit codes on failure, and preserve script-friendly behavior.
+
+## Release process
+
+Routurn uses Semantic Versioning. Release notes are generated from `CHANGELOG.md`; Git commit messages are not used as the release body.
+
+Before creating a release tag:
+
+1. Move the relevant entries from `[Unreleased]` into a versioned section such as `## [0.2.0] - 2026-10-15`.
+2. Run the normal quality gate.
+3. Preview the release body with `sh scripts/release-notes.sh v0.2.0`.
+4. Commit and push the changelog update and wait for CI to pass.
+5. Create an annotated tag such as `git tag -a v0.2.0 -m "Routurn v0.2.0"` and push it.
+
+The tag-driven release workflow validates the tag and changelog, rebuilds and tests Routurn, creates cross-platform archives, verifies the embedded version, generates SHA-256 checksums, and publishes the GitHub Release using the changelog-derived notes.
+
+Tags containing a suffix such as `v0.2.0-rc.1` are published as prereleases. Stable tags are marked as the latest release.

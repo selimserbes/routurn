@@ -14,12 +14,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+
+      - name: CLI entrypoint
+        run: test -f cmd/routurn/main.go
 
       - name: Format check
         run: test -z "$(gofmt -l .)"
@@ -30,8 +35,17 @@ jobs:
       - name: Test
         run: go test ./...
 
-      - name: Build
-        run: go build ./cmd/routurn
+      - name: Build CLI
+        run: go build -o /tmp/routurn ./cmd/routurn
 
-      - name: Installer syntax
-        run: sh -n install.sh
+      - name: Shell syntax
+        run: |
+          sh -n install.sh
+          sh -n scripts/release-notes.sh
+
+      - name: Release notes smoke test
+        run: |
+          sh scripts/release-notes.sh v0.1.0 >/tmp/routurn-release-notes.md
+          grep -q "## What's Changed" /tmp/routurn-release-notes.md
+          grep -q "Agentless SSH target management" /tmp/routurn-release-notes.md
+          grep -q "## Installation" /tmp/routurn-release-notes.md

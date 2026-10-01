@@ -6,6 +6,8 @@ The project follows Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-01
+
 ### Added
 
 - Agentless SSH target management.
@@ -18,3 +20,6 @@ The project follows Semantic Versioning.
 - SSH connection reuse for multi-step workflows.
 - Shell completion generation for bash, zsh, fish, and PowerShell.
 - CI and tag-driven cross-platform GitHub release automation.
+
+[Unreleased]: https://github.com/selimserbes/routurn/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/selimserbes/routurn/releases/tag/v0.1.0
