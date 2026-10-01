@@ -6,13 +6,14 @@ import (
 	"github.com/selimserbes/routurn/internal/config"
 	"github.com/selimserbes/routurn/internal/project"
 	"github.com/selimserbes/routurn/internal/remote"
+	"github.com/selimserbes/routurn/internal/runstate"
 	"github.com/spf13/cobra"
 )
 
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show the resolved project and remote target",
+		Short: "Show the resolved project, remote target, and latest run",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resolved, err := project.Resolve(projectName)
@@ -33,6 +34,10 @@ func newStatusCmd() *cobra.Command {
 				if target, ok := global.Targets[resolved.Config.Remote.Target]; ok {
 					fmt.Fprintf(cmd.OutOrStdout(), "SSH          %s\n", remote.Destination(target))
 				}
+			}
+			runs, err := runstate.List(resolved.Root)
+			if err == nil && len(runs) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Latest run   %s (%s, %s)\n", runs[0].ID, runs[0].Status, runs[0].Task)
 			}
 			return nil
 		},

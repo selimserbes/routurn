@@ -23,7 +23,11 @@ func Execute(version string) error {
 		newDoctorCmd(),
 		newTargetCmd(),
 		newStatusCmd(),
+		newSyncCmd(),
 		newRunCmd(),
+		newFetchCmd(),
+		newExecCmd(),
+		newRunsCmd(),
 	)
 	return root.Execute()
 }

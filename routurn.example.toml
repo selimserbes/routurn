@@ -3,7 +3,7 @@ name = "example-project"
 
 [remote]
 target = "remote-dev"
-path = "/home/user/workspace/example-project"
+path = "/home/developer/projects/example-project"
 
 [sync]
 exclude = [
@@ -18,7 +18,7 @@ exclude = [
 
 [tasks.test]
 command = "go test ./..."
-artifacts = []
+artifacts = ["reports/**"]
 
 [tasks.train]
 command = "python scripts/train.py"
