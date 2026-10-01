@@ -6,6 +6,33 @@ Routurn is for development loops where code is edited locally but the real build
 
 The remote machine does **not** need Routurn, a daemon, or a privileged service. Routurn stays on the user's machine and works over standard SSH using common remote tools (`sh`, `tar`, and `find`).
 
+
+## Install
+
+Routurn is distributed as a single local binary. Nothing is installed on remote targets.
+
+Linux and macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/main/install.sh | sh
+```
+
+The installer downloads the matching GitHub Release asset, verifies its SHA-256 checksum, and installs `routurn` to `~/.local/bin` by default. Override the destination with `ROUTURN_INSTALL_DIR`.
+
+A specific release can be installed with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/main/install.sh | ROUTURN_VERSION=v0.1.0 sh
+```
+
+Go users can also install from source:
+
+```bash
+go install github.com/selimserbes/routurn/cmd/routurn@latest
+```
+
+Release binaries are produced for Linux, macOS, and Windows on amd64 and arm64.
+
 ## Core loop
 
 ```text
@@ -41,6 +68,11 @@ routurn target add <name> --host <host> [--user <user>]
 routurn target list
 routurn target remove <name>
 
+routurn project add [path] [--name <name>]
+routurn project list
+routurn project show <name>
+routurn project remove <name>
+
 routurn status [run-id|latest]
 routurn apply <update-archive> [--dry-run] [-y]
 routurn rollback <update-id|latest>
@@ -72,6 +104,26 @@ All project commands can also be used outside the project directory with a regis
 ```bash
 routurn -p example-project exec test
 ```
+
+
+## Project registry
+
+`routurn init` automatically registers the project locally. The registry lets project commands run from any directory:
+
+```bash
+routurn -p example-project exec test
+```
+
+Manage the registry explicitly when moving or cloning a project:
+
+```bash
+routurn project add /path/to/example-project
+routurn project list
+routurn project show example-project
+routurn project remove example-project
+```
+
+The registry is user-local configuration; absolute local paths are never written to `routurn.toml` or required in the public repository.
 
 ## Project configuration
 
@@ -386,3 +438,13 @@ The next v0.1 pieces include:
 - release packaging and install helpers
 - optional validated 7z/RAR import backends
 - stronger end-to-end integration tests over disposable SSH targets
+
+## Releases
+
+Every `v*` Git tag triggers the release workflow. CI tests and vets the code, then the release workflow publishes cross-platform archives and `checksums.txt` to GitHub Releases. The release tag is embedded into the binary, so all of these report the same version:
+
+```bash
+routurn version
+routurn --version
+routurn -V
+```
