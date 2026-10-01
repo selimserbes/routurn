@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/selimserbes/routurn/internal/runstate"
@@ -11,22 +12,34 @@ import (
 func newFetchCmd() *cobra.Command {
 	var output string
 	cmd := &cobra.Command{
-		Use:   "fetch <task>",
-		Short: "Fetch artifacts declared by a task",
-		Args:  cobra.ExactArgs(1),
+		Use:   "fetch [task|run-id|latest]",
+		Short: "Fetch artifacts for a recorded run",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := resolveProjectContext()
 			if err != nil {
 				return err
 			}
-			taskName := args[0]
-			if _, ok := ctx.Resolved.Config.Tasks[taskName]; !ok {
-				return fmt.Errorf("task %q is not defined in routurn.toml", taskName)
+
+			selector := "latest"
+			if len(args) == 1 {
+				selector = args[0]
 			}
-			if output == "" {
-				output = filepath.Join(ctx.Resolved.Root, ".routurn", "fetches", runstate.NewID()+"-"+taskName)
+			manifest, err := resolveFetchRun(ctx.Resolved.Root, selector)
+			if err != nil {
+				return err
 			}
-			files, err := fetchTaskArtifacts(ctx, taskName, output)
+			if _, ok := ctx.Resolved.Config.Tasks[manifest.Task]; !ok {
+				return fmt.Errorf("task %q from run %s is not defined in routurn.toml", manifest.Task, manifest.ID)
+			}
+
+			dest := output
+			attachToRun := dest == ""
+			if attachToRun {
+				dest = filepath.Join(runstate.Dir(ctx.Resolved.Root, manifest.ID), "artifacts")
+			}
+
+			files, err := fetchTaskArtifacts(ctx, manifest.Task, dest)
 			if err != nil {
 				return err
 			}
@@ -34,14 +47,40 @@ func newFetchCmd() *cobra.Command {
 				fmt.Fprintln(cmd.OutOrStdout(), "No matching artifacts found.")
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d artifact(s)\n", len(files))
+
+			if attachToRun {
+				manifest.Artifacts = files
+				if err := runstate.Save(ctx.Resolved.Root, manifest); err != nil {
+					return err
+				}
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d artifact(s) for run %s\n", len(files), manifest.ID)
 			for _, file := range files {
 				fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", file)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Saved to %s\n", output)
+			fmt.Fprintf(cmd.OutOrStdout(), "Saved to %s\n", dest)
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&output, "output", "o", "", "artifact destination directory")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "custom artifact destination directory")
 	return cmd
+}
+
+func resolveFetchRun(root, selector string) (runstate.Manifest, error) {
+	if selector == "latest" {
+		id, err := runstate.ResolveID(root, "latest")
+		if err != nil {
+			return runstate.Manifest{}, err
+		}
+		return runstate.Load(root, id)
+	}
+
+	// Prefer an exact run ID when a matching run directory exists.
+	if _, err := os.Stat(runstate.Dir(root, selector)); err == nil {
+		return runstate.Load(root, selector)
+	}
+
+	// Otherwise treat the selector as a task name and resolve its latest run.
+	return runstate.LatestByTask(root, selector)
 }

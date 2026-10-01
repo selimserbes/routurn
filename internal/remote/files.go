@@ -63,6 +63,7 @@ func UploadTar(target config.Target, localRoot, remoteRoot string, paths []strin
 	args := sshArgs(target, false)
 	remoteCommand := fmt.Sprintf("mkdir -p %s && cd %s && tar -xf -", shellQuote(remoteRoot), shellQuote(remoteRoot))
 	args = append(args, Destination(target), remoteCommand)
+	debugCommand("ssh", args)
 
 	cmd := exec.Command("ssh", args...)
 	stdin, err := cmd.StdinPipe()
@@ -180,6 +181,7 @@ func ReadTar(target config.Target, remoteRoot string, paths []string) (io.Reader
 	args := sshArgs(target, false)
 	remoteCommand := fmt.Sprintf("cd %s && tar -cf - -T -", shellQuote(remoteRoot))
 	args = append(args, Destination(target), remoteCommand)
+	debugCommand("ssh", args)
 	cmd := exec.Command("ssh", args...)
 
 	stdin, err := cmd.StdinPipe()

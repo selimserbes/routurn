@@ -6,11 +6,56 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/selimserbes/routurn/internal/config"
 )
+
+var (
+	verboseMu     sync.RWMutex
+	verbose       bool
+	verboseWriter io.Writer = io.Discard
+)
+
+// SetVerbose enables or disables diagnostic output for remote commands.
+func SetVerbose(enabled bool, writer io.Writer) {
+	verboseMu.Lock()
+	defer verboseMu.Unlock()
+	verbose = enabled
+	if writer == nil {
+		writer = io.Discard
+	}
+	verboseWriter = writer
+}
+
+func debugCommand(name string, args []string) {
+	verboseMu.RLock()
+	defer verboseMu.RUnlock()
+	if !verbose {
+		return
+	}
+	parts := make([]string, 0, len(args)+1)
+	parts = append(parts, name)
+	for _, arg := range args {
+		parts = append(parts, shellDisplayQuote(arg))
+	}
+	fmt.Fprintf(verboseWriter, "+ %s\n", strings.Join(parts, " "))
+}
+
+func shellDisplayQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+	if strings.IndexFunc(value, func(r rune) bool {
+		return !(r == '-' || r == '_' || r == '.' || r == '/' || r == ':' || r == '@' || r == '%' || r == '=' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
+	}) == -1 {
+		return value
+	}
+	return shellQuote(value)
+}
 
 func Destination(target config.Target) string {
 	if target.User == "" {
@@ -20,7 +65,17 @@ func Destination(target config.Target) string {
 }
 
 func sshArgs(target config.Target, interactive bool) []string {
-	args := []string{"-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3"}
+	args := []string{
+		"-o", "ServerAliveInterval=30",
+		"-o", "ServerAliveCountMax=3",
+	}
+	if controlPath := sshControlPath(); controlPath != "" {
+		args = append(args,
+			"-o", "ControlMaster=auto",
+			"-o", "ControlPersist=120",
+			"-o", "ControlPath="+controlPath,
+		)
+	}
 	if target.Port > 0 && target.Port != 22 {
 		args = append(args, "-p", strconv.Itoa(target.Port))
 	}
@@ -28,6 +83,20 @@ func sshArgs(target config.Target, interactive bool) []string {
 		args = append(args, "-t")
 	}
 	return args
+}
+
+func sshControlPath() string {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil || cacheDir == "" {
+		return ""
+	}
+	dir := filepath.Join(cacheDir, "routurn", "ssh")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return ""
+	}
+	// OpenSSH expands %C to a hash of the connection tuple. This gives all
+	// Routurn SSH subprocesses for the same target a stable multiplex socket.
+	return filepath.Join(dir, "%C")
 }
 
 func Run(target config.Target, remotePath, command string, interactive bool) error {
@@ -39,6 +108,7 @@ func RunWithIO(target config.Target, remotePath, command string, interactive boo
 	args := sshArgs(target, interactive)
 	remoteCommand := fmt.Sprintf("cd %s && exec sh -lc %s", shellQuote(remotePath), shellQuote(command))
 	args = append(args, Destination(target), remoteCommand)
+	debugCommand("ssh", args)
 
 	cmd := exec.Command("ssh", args...)
 	cmd.Stdin = stdin
@@ -57,6 +127,7 @@ func RunWithIO(target config.Target, remotePath, command string, interactive boo
 func RunCommand(target config.Target, command string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	args := sshArgs(target, false)
 	args = append(args, Destination(target), command)
+	debugCommand("ssh", args)
 	cmd := exec.Command("ssh", args...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout

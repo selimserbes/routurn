@@ -116,7 +116,7 @@ func newExecCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "PID      %d\n", result.Manifest.RemotePID)
 				fmt.Fprintf(cmd.OutOrStdout(), "Watch    routurn logs %s --follow\n", result.Manifest.ID)
 				fmt.Fprintf(cmd.OutOrStdout(), "Status   routurn status %s\n", result.Manifest.ID)
-				fmt.Fprintf(cmd.OutOrStdout(), "Fetch    routurn fetch %s\n", taskName)
+				fmt.Fprintf(cmd.OutOrStdout(), "Fetch    routurn fetch %s\n", result.Manifest.ID)
 				return nil
 			}
 

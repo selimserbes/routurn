@@ -135,3 +135,17 @@ func OpenLogs(root, id string) (*os.File, *os.File, error) {
 	}
 	return stdout, stderr, nil
 }
+
+// LatestByTask returns the most recent recorded run for a task.
+func LatestByTask(root, task string) (Manifest, error) {
+	runs, err := List(root)
+	if err != nil {
+		return Manifest{}, err
+	}
+	for _, run := range runs {
+		if run.Task == task {
+			return run, nil
+		}
+	}
+	return Manifest{}, fmt.Errorf("no runs recorded for task %q", task)
+}

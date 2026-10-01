@@ -48,10 +48,23 @@ routurn sync [--dry-run]
 routurn run <task> [--detach]
 routurn logs <run-id|latest> [--follow]
 routurn stop <run-id|latest> [--force]
-routurn fetch <task>
+routurn fetch [task|run-id|latest]
 routurn exec <task> [update-archive] [--detach]
 routurn runs
 routurn runs show <run-id|latest> [--json]
+
+routurn version
+routurn --version
+routurn -V
+```
+
+CLI conventions:
+
+```text
+-h, --help     help
+help           help command
+-V, --version  version
+-v, --verbose  detailed diagnostics
 ```
 
 All project commands can also be used outside the project directory with a registered project name:
@@ -253,7 +266,7 @@ routurn exec train --detach
 Because the local Routurn process exits immediately after launching a detached task, artifact collection is intentionally deferred. After the task finishes, collect its configured outputs with:
 
 ```bash
-routurn fetch train
+routurn fetch latest
 ```
 
 Interactive tasks cannot be detached.
@@ -369,7 +382,6 @@ go run ./cmd/routurn version
 
 The next v0.1 pieces include:
 
-- detached artifact collection tied directly to a run ID
 - structured `--json` output for AI/automation workflows
 - release packaging and install helpers
 - optional validated 7z/RAR import backends
