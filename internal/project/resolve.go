@@ -21,7 +21,7 @@ func Resolve(name string) (*Resolved, error) {
 		}
 		link, ok := global.Projects[name]
 		if !ok {
-			return nil, fmt.Errorf("project %q is not registered; run 'routurn init' in that project first", name)
+			return nil, fmt.Errorf("project %q is not registered\n\nRegister an existing project:\n  routurn project add /path/to/project\n\nOr initialize a new project:\n  routurn init", name)
 		}
 		root, err := filepath.Abs(link.Root)
 		if err != nil {

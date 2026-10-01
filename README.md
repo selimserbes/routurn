@@ -1,5 +1,8 @@
 # Routurn
 
+[![CI](https://github.com/selimserbes/routurn/actions/workflows/ci.yml/badge.svg)](https://github.com/selimserbes/routurn/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 **Agentless remote iteration CLI for syncing changes, running tasks over SSH, and collecting results.**
 
 Routurn is for development loops where code is edited locally but the real build, test, simulation, benchmark, training, or runtime environment lives on another machine.
@@ -11,27 +14,67 @@ The remote machine does **not** need Routurn, a daemon, or a privileged service.
 
 Routurn is distributed as a single local binary. Nothing is installed on remote targets.
 
-Linux and macOS:
+### Current source build
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/main/install.sh | sh
-```
-
-The installer downloads the matching GitHub Release asset, verifies its SHA-256 checksum, and installs `routurn` to `~/.local/bin` by default. Override the destination with `ROUTURN_INSTALL_DIR`.
-
-A specific release can be installed with:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/main/install.sh | ROUTURN_VERSION=v0.1.0 sh
-```
-
-Go users can also install from source:
+Before the first tagged release:
 
 ```bash
 go install github.com/selimserbes/routurn/cmd/routurn@latest
 ```
 
-Release binaries are produced for Linux, macOS, and Windows on amd64 and arm64.
+### Release installer
+
+Starting with `v0.1.0`, Linux and macOS users can install the matching release binary with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/main/install.sh | sh
+```
+
+The installer verifies the release archive against the published SHA-256 checksum and installs `routurn` to `~/.local/bin` by default. Override the destination with `ROUTURN_INSTALL_DIR`.
+
+Install a specific release with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/main/install.sh | ROUTURN_VERSION=v0.1.0 sh
+```
+
+Release binaries are built for Linux, macOS, and Windows on amd64 and arm64.
+
+## Quick start
+
+Create or enter a local project, then initialize Routurn:
+
+```bash
+cd example-project
+routurn init
+```
+
+Register an SSH target locally:
+
+```bash
+routurn target add remote-dev --host dev.example.com --user developer
+```
+
+Edit `routurn.toml` to point at the remote project path and define a task:
+
+```toml
+[remote]
+target = "remote-dev"
+path = "/home/developer/projects/example-project"
+
+[tasks.test]
+command = "go test ./..."
+artifacts = ["reports/**"]
+```
+
+Check the setup and run one complete iteration:
+
+```bash
+routurn doctor
+routurn exec test
+```
+
+Routurn syncs changes, streams remote output live, preserves run metadata, and brings declared artifacts back.
 
 ## Core loop
 
@@ -405,6 +448,24 @@ Examples include:
 
 Routurn does not need to understand the programming language. It only needs a project, an SSH target, and the commands you define.
 
+
+## Shell completion
+
+Generate completion for your shell:
+
+```bash
+routurn completion bash
+routurn completion zsh
+routurn completion fish
+routurn completion powershell
+```
+
+To see the recommended installation command for a shell:
+
+```bash
+routurn completion install zsh
+```
+
 ## Requirements
 
 Local machine:
@@ -432,12 +493,12 @@ go run ./cmd/routurn version
 
 ## Roadmap
 
-The next v0.1 pieces include:
+Near-term work includes:
 
 - structured `--json` output for AI/automation workflows
-- release packaging and install helpers
 - optional validated 7z/RAR import backends
 - stronger end-to-end integration tests over disposable SSH targets
+- richer machine-readable run/event output
 
 ## Releases
 
@@ -448,3 +509,7 @@ routurn version
 routurn --version
 routurn -V
 ```
+
+## License
+
+Routurn is licensed under the Apache License 2.0. See [LICENSE](LICENSE).

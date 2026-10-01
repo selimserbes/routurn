@@ -36,6 +36,7 @@ func Execute(version string) error {
 
 	root.AddCommand(
 		newVersionCmd(version),
+		newCompletionCmd(root),
 		newInitCmd(),
 		newDoctorCmd(),
 		newTargetCmd(),
