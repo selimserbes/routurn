@@ -86,6 +86,12 @@ func newRunsShowCmd() *cobra.Command {
 			if m.ExitCode != nil {
 				fmt.Fprintf(cmd.OutOrStdout(), "Exit code  %d\n", *m.ExitCode)
 			}
+			if m.Detached {
+				fmt.Fprintf(cmd.OutOrStdout(), "Detached   true\n")
+			}
+			if m.RemotePID > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Remote PID %d\n", m.RemotePID)
+			}
 			if m.Snapshot != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "Snapshot   %s\n", m.Snapshot)
 			}

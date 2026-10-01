@@ -128,12 +128,13 @@ func runTask(ctx *projectContext, taskName string, manifest runstate.Manifest, s
 
 	if manifest.ID == "" {
 		manifest = runstate.Manifest{
-			ID:        runstate.NewID(),
-			Project:   ctx.Resolved.Config.Name,
-			Target:    ctx.Resolved.Config.Remote.Target,
-			Task:      taskName,
-			Status:    "RUNNING",
-			StartedAt: time.Now().UTC().Format(time.RFC3339),
+			ID:         runstate.NewID(),
+			Project:    ctx.Resolved.Config.Name,
+			Target:     ctx.Resolved.Config.Remote.Target,
+			Task:       taskName,
+			Status:     "RUNNING",
+			StartedAt:  time.Now().UTC().Format(time.RFC3339),
+			RemotePath: ctx.Resolved.Config.Remote.Path,
 		}
 		if _, err := runstate.Create(ctx.Resolved.Root, manifest); err != nil {
 			return taskRunResult{Err: err}
@@ -177,6 +178,53 @@ func runTask(ctx *projectContext, taskName string, manifest runstate.Manifest, s
 	}
 	_ = runstate.Save(ctx.Resolved.Root, manifest)
 	return taskRunResult{Manifest: manifest, RunDir: runDir, Err: runErr}
+}
+
+func runTaskDetached(ctx *projectContext, taskName string, manifest runstate.Manifest) taskRunResult {
+	task, ok := ctx.Resolved.Config.Tasks[taskName]
+	if !ok {
+		return taskRunResult{Err: fmt.Errorf("task %q is not defined in %s", taskName, config.ProjectFileName)}
+	}
+	if task.Interactive {
+		return taskRunResult{Err: fmt.Errorf("task %q is interactive and cannot be detached", taskName)}
+	}
+
+	if manifest.ID == "" {
+		manifest = runstate.Manifest{
+			ID:         runstate.NewID(),
+			Project:    ctx.Resolved.Config.Name,
+			Target:     ctx.Resolved.Config.Remote.Target,
+			Task:       taskName,
+			Status:     "RUNNING",
+			StartedAt:  time.Now().UTC().Format(time.RFC3339),
+			Detached:   true,
+			RemotePath: ctx.Resolved.Config.Remote.Path,
+		}
+		if _, err := runstate.Create(ctx.Resolved.Root, manifest); err != nil {
+			return taskRunResult{Err: err}
+		}
+	} else {
+		manifest.Status = "RUNNING"
+		manifest.Detached = true
+		manifest.RemotePath = ctx.Resolved.Config.Remote.Path
+		if manifest.StartedAt == "" {
+			manifest.StartedAt = time.Now().UTC().Format(time.RFC3339)
+		}
+		if err := runstate.Save(ctx.Resolved.Root, manifest); err != nil {
+			return taskRunResult{Manifest: manifest, Err: err}
+		}
+	}
+
+	pid, err := remote.StartDetached(ctx.Target, ctx.Resolved.Config.Remote.Path, manifest.ID, task.Command)
+	if err != nil {
+		manifest.Status = "FAILED"
+		manifest.FinishedAt = time.Now().UTC().Format(time.RFC3339)
+		_ = runstate.Save(ctx.Resolved.Root, manifest)
+		return taskRunResult{Manifest: manifest, RunDir: runstate.Dir(ctx.Resolved.Root, manifest.ID), Err: err}
+	}
+	manifest.RemotePID = pid
+	_ = runstate.Save(ctx.Resolved.Root, manifest)
+	return taskRunResult{Manifest: manifest, RunDir: runstate.Dir(ctx.Resolved.Root, manifest.ID)}
 }
 
 func fetchTaskArtifacts(ctx *projectContext, taskName, dest string) ([]string, error) {

@@ -41,13 +41,15 @@ routurn target add <name> --host <host> [--user <user>]
 routurn target list
 routurn target remove <name>
 
-routurn status
+routurn status [run-id|latest]
 routurn apply <update-archive> [--dry-run] [-y]
 routurn rollback <update-id|latest>
 routurn sync [--dry-run]
-routurn run <task>
+routurn run <task> [--detach]
+routurn logs <run-id|latest> [--follow]
+routurn stop <run-id|latest> [--force]
 routurn fetch <task>
-routurn exec <task> [update-archive]
+routurn exec <task> [update-archive] [--detach]
 routurn runs
 routurn runs show <run-id|latest> [--json]
 ```
@@ -205,6 +207,57 @@ Remote stdout and stderr are streamed live into the local terminal. Routurn also
 
 A failed remote process produces a failed Routurn command and a non-zero exit status.
 
+## Detached long-running tasks
+
+Long training, build, simulation, and benchmark jobs can continue after the local terminal disconnects:
+
+```bash
+routurn run train --detach
+```
+
+Routurn starts the task in the background on the remote machine and returns a run ID. No Routurn daemon or binary is installed remotely. The run is represented by small state and log files under the remote project's `.routurn/runs/<run-id>/` directory.
+
+Check whether it is still running:
+
+```bash
+routurn status latest
+routurn status <run-id>
+```
+
+Reconnect to its logs without stopping it:
+
+```bash
+routurn logs latest --follow
+```
+
+`Ctrl+C` disconnects the log viewer; it does not stop the remote task.
+
+Request a graceful stop:
+
+```bash
+routurn stop latest
+```
+
+Or force-stop it when necessary:
+
+```bash
+routurn stop latest --force
+```
+
+The complete sync + run loop can also be detached:
+
+```bash
+routurn exec train --detach
+```
+
+Because the local Routurn process exits immediately after launching a detached task, artifact collection is intentionally deferred. After the task finishes, collect its configured outputs with:
+
+```bash
+routurn fetch train
+```
+
+Interactive tasks cannot be detached.
+
 ## One-command iteration
 
 ```bash
@@ -316,8 +369,8 @@ go run ./cmd/routurn version
 
 The next v0.1 pieces include:
 
-- safe incoming update bundles (`routurn apply`)
-- rollback from remote snapshots
-- detached long-running tasks and log reattachment
+- detached artifact collection tied directly to a run ID
 - structured `--json` output for AI/automation workflows
 - release packaging and install helpers
+- optional validated 7z/RAR import backends
+- stronger end-to-end integration tests over disposable SSH targets

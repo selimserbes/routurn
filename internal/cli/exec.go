@@ -14,6 +14,7 @@ func newExecCmd() *cobra.Command {
 	var noFetch bool
 	var yes bool
 	var stripComponents int
+	var detach bool
 	cmd := &cobra.Command{
 		Use:   "exec <task> [update-archive]",
 		Short: "Optionally apply an update, sync changes, run a remote task, and fetch artifacts",
@@ -24,14 +25,21 @@ func newExecCmd() *cobra.Command {
 				return err
 			}
 			taskName := args[0]
-			if _, ok := ctx.Resolved.Config.Tasks[taskName]; !ok {
+			task, ok := ctx.Resolved.Config.Tasks[taskName]
+			if !ok {
 				return fmt.Errorf("task %q is not defined in routurn.toml", taskName)
+			}
+			if detach && task.Interactive {
+				return fmt.Errorf("task %q is interactive and cannot be detached", taskName)
 			}
 
 			hasUpdate := len(args) == 2
 			totalSteps := 3
+			if detach {
+				totalSteps = 2
+			}
 			if hasUpdate {
-				totalSteps = 4
+				totalSteps++
 			}
 			var updateID, updateArchive string
 			if hasUpdate {
@@ -76,7 +84,9 @@ func newExecCmd() *cobra.Command {
 			runStep := 2
 			fetchStep := 3
 			if hasUpdate {
-				syncStep, runStep, fetchStep = 2, 3, 4
+				syncStep++
+				runStep++
+				fetchStep++
 			}
 			if !noSync {
 				fmt.Fprintf(cmd.OutOrStdout(), "\n[%d/%d] Sync\n", syncStep, totalSteps)
@@ -96,6 +106,20 @@ func newExecCmd() *cobra.Command {
 			_ = runstate.Save(ctx.Resolved.Root, manifest)
 
 			fmt.Fprintf(cmd.OutOrStdout(), "\n[%d/%d] Run\n", runStep, totalSteps)
+			if detach {
+				result := runTaskDetached(ctx, taskName, manifest)
+				if result.Err != nil {
+					return result.Err
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "\n────────────────────────────────────────")
+				fmt.Fprintf(cmd.OutOrStdout(), "✓ Detached run started · %s\n", result.Manifest.ID)
+				fmt.Fprintf(cmd.OutOrStdout(), "PID      %d\n", result.Manifest.RemotePID)
+				fmt.Fprintf(cmd.OutOrStdout(), "Watch    routurn logs %s --follow\n", result.Manifest.ID)
+				fmt.Fprintf(cmd.OutOrStdout(), "Status   routurn status %s\n", result.Manifest.ID)
+				fmt.Fprintf(cmd.OutOrStdout(), "Fetch    routurn fetch %s\n", taskName)
+				return nil
+			}
+
 			result := runTask(ctx, taskName, manifest, stdinForTask(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 			if result.RunDir == "" {
 				return result.Err
@@ -141,5 +165,6 @@ func newExecCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&noFetch, "no-fetch", false, "do not fetch declared task artifacts")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "apply an update archive without confirmation")
 	cmd.Flags().IntVar(&stripComponents, "strip-components", 0, "remove leading path components from update archive entries")
+	cmd.Flags().BoolVar(&detach, "detach", false, "start the remote task in the background; artifact fetching is deferred")
 	return cmd
 }

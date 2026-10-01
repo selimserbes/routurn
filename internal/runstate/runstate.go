@@ -26,6 +26,9 @@ type Manifest struct {
 	Artifacts     []string `json:"artifacts,omitempty"`
 	UpdateID      string   `json:"update_id,omitempty"`
 	UpdateArchive string   `json:"update_archive,omitempty"`
+	Detached      bool     `json:"detached,omitempty"`
+	RemotePID     int      `json:"remote_pid,omitempty"`
+	RemotePath    string   `json:"remote_path,omitempty"`
 }
 
 func NewID() string {
@@ -100,6 +103,20 @@ func List(root string) ([]Manifest, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID > out[j].ID })
 	return out, nil
+}
+
+func ResolveID(root, id string) (string, error) {
+	if id != "latest" {
+		return id, nil
+	}
+	runs, err := List(root)
+	if err != nil {
+		return "", err
+	}
+	if len(runs) == 0 {
+		return "", fmt.Errorf("no runs recorded")
+	}
+	return runs[0].ID, nil
 }
 
 func OpenLogs(root, id string) (*os.File, *os.File, error) {

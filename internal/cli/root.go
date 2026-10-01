@@ -27,6 +27,8 @@ func Execute(version string) error {
 		newRollbackCmd(),
 		newSyncCmd(),
 		newRunCmd(),
+		newLogsCmd(),
+		newStopCmd(),
 		newFetchCmd(),
 		newExecCmd(),
 		newRunsCmd(),
