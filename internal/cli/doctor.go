@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/selimserbes/routurn/internal/bundle"
 	"github.com/selimserbes/routurn/internal/config"
 	"github.com/selimserbes/routurn/internal/project"
 	"github.com/selimserbes/routurn/internal/remote"
@@ -28,6 +29,12 @@ func newDoctorCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "✓ git      %s (optional)\n", path)
 			} else {
 				fmt.Fprintln(cmd.OutOrStdout(), "! git      missing (optional)")
+			}
+
+			if path, ok := bundle.ExternalImporter(); ok {
+				fmt.Fprintf(cmd.OutOrStdout(), "✓ archive  %s (optional .7z/.rar importer)\n", path)
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "! archive  7zz/7z/7za not found (optional; ZIP/TAR remain native)")
 			}
 
 			resolved, err := project.Resolve(projectName)

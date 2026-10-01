@@ -14,9 +14,9 @@ The remote machine does **not** need Routurn, a daemon, or a privileged service.
 
 Routurn is distributed as a single local binary. Nothing is installed on remote targets.
 
-### Current source build
+### Go install
 
-Before the first tagged release:
+With Go installed:
 
 ```bash
 go install github.com/selimserbes/routurn/cmd/routurn@latest
@@ -117,6 +117,7 @@ routurn project show <name>
 routurn project remove <name>
 
 routurn status [run-id|latest]
+routurn bundle inspect <update-archive> [--json]
 routurn apply <update-archive> [--dry-run] [-y]
 routurn rollback <update-id|latest>
 routurn sync [--dry-run]
@@ -240,14 +241,24 @@ routurn rollback latest
 
 After rollback, `routurn sync` sends the restored local state back to the remote target.
 
-Native archive formats in this release:
+Archive support:
 
-- `.zip`
-- `.tar`
-- `.tar.gz`
-- `.tgz`
+- `.zip` — native
+- `.tar` — native
+- `.tar.gz` / `.tgz` — native
+- `.7z` — validated local 7-Zip importer
+- `.rar` — validated local 7-Zip importer
 
-RAR and 7z are intentionally not extracted through an unsafe shell fallback yet. They can be added later as validated import backends while keeping the same `apply` interface.
+`.7z` and `.rar` require a local 7-Zip-compatible CLI named `7zz`, `7z`, or `7za`. This is a **local-only optional dependency**; nothing extra is installed on the remote target. Routurn lists and validates entries first, rejects links/special files/encrypted entries/unsafe paths, then streams selected file contents through stdout instead of extracting the archive directly into the project.
+
+Inspect any supported bundle without modifying a project:
+
+```bash
+routurn bundle inspect ~/Downloads/update.7z
+routurn bundle inspect ~/Downloads/update.rar --json
+```
+
+`routurn doctor` reports whether the optional `.7z`/`.rar` importer is available. ZIP/TAR support does not depend on it.
 
 Archives that contain one extra top-level directory can be handled explicitly:
 

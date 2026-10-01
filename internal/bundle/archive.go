@@ -38,8 +38,28 @@ func ReadArchive(path string, strip int) ([]Entry, error) {
 		}
 		defer gz.Close()
 		return readTar(tar.NewReader(gz), strip)
+	case strings.HasSuffix(lower, ".7z"), strings.HasSuffix(lower, ".rar"):
+		return readExternalArchive(path, strip)
 	default:
-		return nil, fmt.Errorf("unsupported update archive %q; supported: .zip, .tar, .tar.gz, .tgz", filepath.Base(path))
+		return nil, fmt.Errorf("unsupported update archive %q; supported: .zip, .tar, .tar.gz, .tgz, .7z, .rar", filepath.Base(path))
+	}
+}
+
+func archiveFormat(path string) string {
+	lower := strings.ToLower(path)
+	switch {
+	case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
+		return "tar.gz"
+	case strings.HasSuffix(lower, ".zip"):
+		return "zip"
+	case strings.HasSuffix(lower, ".tar"):
+		return "tar"
+	case strings.HasSuffix(lower, ".7z"):
+		return "7z"
+	case strings.HasSuffix(lower, ".rar"):
+		return "rar"
+	default:
+		return "unknown"
 	}
 }
 
@@ -168,7 +188,7 @@ func normalizeArchivePath(name string, strip int) (string, bool, error) {
 	if name == "" {
 		return "", true, nil
 	}
-	if strings.HasPrefix(name, "/") || strings.ContainsRune(name, '\x00') || strings.ContainsRune(name, '\n') || strings.ContainsRune(name, '\r') {
+	if strings.HasPrefix(name, "/") || hasUnsafePathControl(name) || hasWindowsDrivePrefix(name) {
 		return "", false, fmt.Errorf("unsafe archive path: %q", name)
 	}
 	parts := strings.Split(name, "/")
@@ -176,7 +196,7 @@ func normalizeArchivePath(name string, strip int) (string, bool, error) {
 		if p == "" || p == "." {
 			continue
 		}
-		if p == ".." {
+		if p == ".." || strings.Contains(p, ":") || strings.HasSuffix(p, ".") || strings.HasSuffix(p, " ") || isWindowsReservedSegment(p) {
 			return "", false, fmt.Errorf("unsafe archive path: %q", name)
 		}
 	}
@@ -195,4 +215,37 @@ func normalizeArchivePath(name string, strip int) (string, bool, error) {
 		return "", false, fmt.Errorf("protected project path in archive: %s", clean)
 	}
 	return clean, false, nil
+}
+
+func hasUnsafePathControl(name string) bool {
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+func hasWindowsDrivePrefix(name string) bool {
+	if len(name) < 2 || name[1] != ':' {
+		return false
+	}
+	c := name[0]
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func isWindowsReservedSegment(segment string) bool {
+	base := segment
+	if i := strings.IndexByte(base, '.'); i >= 0 {
+		base = base[:i]
+	}
+	base = strings.ToUpper(base)
+	switch base {
+	case "CON", "PRN", "AUX", "NUL", "CLOCK$":
+		return true
+	}
+	if len(base) == 4 && (strings.HasPrefix(base, "COM") || strings.HasPrefix(base, "LPT")) && base[3] >= '1' && base[3] <= '9' {
+		return true
+	}
+	return false
 }

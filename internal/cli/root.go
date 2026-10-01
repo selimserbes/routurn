@@ -42,6 +42,7 @@ func Execute(version string) error {
 		newTargetCmd(),
 		newProjectCmd(),
 		newStatusCmd(),
+		newBundleCmd(),
 		newApplyCmd(),
 		newRollbackCmd(),
 		newSyncCmd(),

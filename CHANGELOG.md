@@ -6,6 +6,16 @@ The project follows Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- `routurn bundle inspect` for validating and inspecting update archives without modifying a project.
+- Optional `.7z` and `.rar` update support through a validated local 7-Zip-compatible importer (`7zz`, `7z`, or `7za`).
+
+### Security
+
+- Reject control characters, Windows drive/ADS/reserved-name paths, and Windows trailing-dot/space aliases before applying updates.
+- External archive import streams file contents through stdout and rejects links, special files, encrypted entries, duplicate normalized paths, and size-limit violations before project writes.
+
 ## [0.1.0] - 2026-10-01
 
 ### Added
