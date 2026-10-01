@@ -23,6 +23,8 @@ func Execute(version string) error {
 		newDoctorCmd(),
 		newTargetCmd(),
 		newStatusCmd(),
+		newApplyCmd(),
+		newRollbackCmd(),
 		newSyncCmd(),
 		newRunCmd(),
 		newFetchCmd(),

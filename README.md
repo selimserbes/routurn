@@ -42,10 +42,12 @@ routurn target list
 routurn target remove <name>
 
 routurn status
+routurn apply <update-archive> [--dry-run] [-y]
+routurn rollback <update-id|latest>
 routurn sync [--dry-run]
 routurn run <task>
 routurn fetch <task>
-routurn exec <task>
+routurn exec <task> [update-archive]
 routurn runs
 routurn runs show <run-id|latest> [--json]
 ```
@@ -101,6 +103,74 @@ routurn target add remote-dev \
 
 `dev.example.com` is documentation-only. In real use, `--host` can be a hostname, IP address, or an alias from `~/.ssh/config`.
 
+
+## AI/chat update archives
+
+Routurn can safely consume an update archive received from a chat-based AI or another developer without manually extracting it into the project. The local project remains the source of truth.
+
+Preview an update:
+
+```bash
+routurn apply ~/Downloads/update.zip --dry-run
+```
+
+Apply it after reviewing the file plan:
+
+```bash
+routurn apply ~/Downloads/update.zip
+```
+
+Routurn rejects path traversal, archive symlinks/special files, `.git/`, `.routurn/`, and writes through symlinked parent directories. Existing files are backed up under `.routurn/updates/<update-id>/` before replacement.
+
+Rollback the most recent applied update:
+
+```bash
+routurn rollback latest
+```
+
+After rollback, `routurn sync` sends the restored local state back to the remote target.
+
+Native archive formats in this release:
+
+- `.zip`
+- `.tar`
+- `.tar.gz`
+- `.tgz`
+
+RAR and 7z are intentionally not extracted through an unsafe shell fallback yet. They can be added later as validated import backends while keeping the same `apply` interface.
+
+Archives that contain one extra top-level directory can be handled explicitly:
+
+```bash
+routurn apply update.zip --strip-components 1
+```
+
+### Update + remote test in one command
+
+A chat workflow can collapse the complete loop into one command:
+
+```bash
+routurn exec test ~/Downloads/update.zip
+```
+
+Routurn then performs:
+
+```text
+inspect + apply local update
+→ create local backup
+→ sync changed local files to remote
+→ create remote snapshot
+→ run the configured task with live terminal output
+→ fetch declared artifacts
+→ save the run manifest and logs
+```
+
+For scripted or AI-controlled local automation, confirmation can be explicitly disabled:
+
+```bash
+routurn exec test ~/Downloads/update.zip --yes
+```
+
 ## Sync safety
 
 Routurn does not blindly mirror and delete an entire remote directory.
@@ -139,6 +209,12 @@ A failed remote process produces a failed Routurn command and a non-zero exit st
 
 ```bash
 routurn exec test
+```
+
+Or include a local update archive in the same iteration:
+
+```bash
+routurn exec test ~/Downloads/update.zip
 ```
 
 `exec` performs the main Routurn loop:

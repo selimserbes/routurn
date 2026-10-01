@@ -12,18 +12,20 @@ import (
 )
 
 type Manifest struct {
-	ID         string   `json:"id"`
-	Project    string   `json:"project"`
-	Target     string   `json:"target"`
-	Task       string   `json:"task"`
-	Status     string   `json:"status"`
-	StartedAt  string   `json:"started_at"`
-	FinishedAt string   `json:"finished_at,omitempty"`
-	ExitCode   *int     `json:"exit_code,omitempty"`
-	Changed    []string `json:"changed,omitempty"`
-	Deleted    []string `json:"deleted,omitempty"`
-	Snapshot   string   `json:"snapshot,omitempty"`
-	Artifacts  []string `json:"artifacts,omitempty"`
+	ID            string   `json:"id"`
+	Project       string   `json:"project"`
+	Target        string   `json:"target"`
+	Task          string   `json:"task"`
+	Status        string   `json:"status"`
+	StartedAt     string   `json:"started_at"`
+	FinishedAt    string   `json:"finished_at,omitempty"`
+	ExitCode      *int     `json:"exit_code,omitempty"`
+	Changed       []string `json:"changed,omitempty"`
+	Deleted       []string `json:"deleted,omitempty"`
+	Snapshot      string   `json:"snapshot,omitempty"`
+	Artifacts     []string `json:"artifacts,omitempty"`
+	UpdateID      string   `json:"update_id,omitempty"`
+	UpdateArchive string   `json:"update_archive,omitempty"`
 }
 
 func NewID() string {

@@ -12,10 +12,12 @@ import (
 func newExecCmd() *cobra.Command {
 	var noSync bool
 	var noFetch bool
+	var yes bool
+	var stripComponents int
 	cmd := &cobra.Command{
-		Use:   "exec <task>",
-		Short: "Sync changes, run a remote task with live output, and fetch its artifacts",
-		Args:  cobra.ExactArgs(1),
+		Use:   "exec <task> [update-archive]",
+		Short: "Optionally apply an update, sync changes, run a remote task, and fetch artifacts",
+		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := resolveProjectContext()
 			if err != nil {
@@ -26,14 +28,38 @@ func newExecCmd() *cobra.Command {
 				return fmt.Errorf("task %q is not defined in routurn.toml", taskName)
 			}
 
+			hasUpdate := len(args) == 2
+			totalSteps := 3
+			if hasUpdate {
+				totalSteps = 4
+			}
+			var updateID, updateArchive string
+			if hasUpdate {
+				fmt.Fprintf(cmd.OutOrStdout(), "[1/%d] Apply update\n", totalSteps)
+				record, applied, err := applyBundle(cmd, ctx.Resolved.Root, args[1], applyOptions{Yes: yes, StripComponents: stripComponents})
+				if err != nil {
+					return err
+				}
+				if !applied {
+					if record.ID == "" {
+						return nil
+					}
+				}
+				updateID = record.ID
+				updateArchive = record.Archive
+				fmt.Fprintln(cmd.OutOrStdout())
+			}
+
 			runID := runstate.NewID()
 			manifest := runstate.Manifest{
-				ID:        runID,
-				Project:   ctx.Resolved.Config.Name,
-				Target:    ctx.Resolved.Config.Remote.Target,
-				Task:      taskName,
-				Status:    "SYNCING",
-				StartedAt: time.Now().UTC().Format(time.RFC3339),
+				ID:            runID,
+				Project:       ctx.Resolved.Config.Name,
+				Target:        ctx.Resolved.Config.Remote.Target,
+				Task:          taskName,
+				Status:        "SYNCING",
+				StartedAt:     time.Now().UTC().Format(time.RFC3339),
+				UpdateID:      updateID,
+				UpdateArchive: updateArchive,
 			}
 			runDir, err := runstate.Create(ctx.Resolved.Root, manifest)
 			if err != nil {
@@ -46,8 +72,14 @@ func newExecCmd() *cobra.Command {
 			fmt.Fprintf(cmd.OutOrStdout(), "Run      %s\n", runID)
 
 			var synced syncResult
+			syncStep := 1
+			runStep := 2
+			fetchStep := 3
+			if hasUpdate {
+				syncStep, runStep, fetchStep = 2, 3, 4
+			}
 			if !noSync {
-				fmt.Fprintln(cmd.OutOrStdout(), "\n[1/3] Sync")
+				fmt.Fprintf(cmd.OutOrStdout(), "\n[%d/%d] Sync\n", syncStep, totalSteps)
 				synced, err = performSync(ctx, cmd.OutOrStdout(), false, runID)
 				if err != nil {
 					manifest.Status = "FAILED"
@@ -56,21 +88,21 @@ func newExecCmd() *cobra.Command {
 					return err
 				}
 			} else {
-				fmt.Fprintln(cmd.OutOrStdout(), "\n[1/3] Sync skipped")
+				fmt.Fprintf(cmd.OutOrStdout(), "\n[%d/%d] Sync skipped\n", syncStep, totalSteps)
 			}
 			manifest.Changed = synced.Changed
 			manifest.Deleted = synced.Deleted
 			manifest.Snapshot = synced.Snapshot
 			_ = runstate.Save(ctx.Resolved.Root, manifest)
 
-			fmt.Fprintln(cmd.OutOrStdout(), "\n[2/3] Run")
+			fmt.Fprintf(cmd.OutOrStdout(), "\n[%d/%d] Run\n", runStep, totalSteps)
 			result := runTask(ctx, taskName, manifest, stdinForTask(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 			if result.RunDir == "" {
 				return result.Err
 			}
 
 			if !noFetch {
-				fmt.Fprintln(cmd.OutOrStdout(), "\n[3/3] Fetch artifacts")
+				fmt.Fprintf(cmd.OutOrStdout(), "\n[%d/%d] Fetch artifacts\n", fetchStep, totalSteps)
 				artifactDir := filepath.Join(result.RunDir, "artifacts")
 				files, fetchErr := fetchTaskArtifacts(ctx, taskName, artifactDir)
 				if fetchErr != nil {
@@ -90,7 +122,7 @@ func newExecCmd() *cobra.Command {
 					}
 				}
 			} else {
-				fmt.Fprintln(cmd.OutOrStdout(), "\n[3/3] Artifact fetch skipped")
+				fmt.Fprintf(cmd.OutOrStdout(), "\n[%d/%d] Artifact fetch skipped\n", fetchStep, totalSteps)
 			}
 			_ = runstate.Save(ctx.Resolved.Root, result.Manifest)
 
@@ -107,5 +139,7 @@ func newExecCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&noSync, "no-sync", false, "run without synchronizing local changes first")
 	cmd.Flags().BoolVar(&noFetch, "no-fetch", false, "do not fetch declared task artifacts")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "apply an update archive without confirmation")
+	cmd.Flags().IntVar(&stripComponents, "strip-components", 0, "remove leading path components from update archive entries")
 	return cmd
 }
