@@ -1,0 +1,26 @@
+version = 1
+name = "example-project"
+
+[remote]
+target = "remote-dev"
+path = "/home/user/workspace/example-project"
+
+[sync]
+exclude = [
+  ".git/**",
+  ".routurn/**",
+  ".venv/**",
+  "venv/**",
+  "**/__pycache__/**",
+  "node_modules/**",
+  "target/**",
+]
+
+[tasks.test]
+command = "go test ./..."
+artifacts = []
+
+[tasks.train]
+command = "python scripts/train.py"
+interactive = true
+artifacts = ["outputs/**"]

@@ -1,0 +1,11 @@
+# Routurn local state
+.routurn/
+
+# Build output
+/bin/
+routurn
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
