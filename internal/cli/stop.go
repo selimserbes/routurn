@@ -10,7 +10,7 @@ import (
 func newStopCmd() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
-		Use:   "stop <run-id|latest>",
+		Use:   "stop <task|run-id|latest>",
 		Short: "Stop a detached remote run",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -23,17 +23,17 @@ func newStopCmd() *cobra.Command {
 				return err
 			}
 			if !state.Alive {
-				fmt.Fprintf(cmd.OutOrStdout(), "Run %s is not running (state %s).\n", ctx.Manifest.ID, state.Status)
+				fmt.Fprintf(cmd.OutOrStdout(), "Task %s is not running (state %s).\n", ctx.Manifest.Task, state.Status)
 				return nil
 			}
 			if err := remote.StopDetached(ctx.Target, ctx.RemotePath, ctx.Manifest.ID, force); err != nil {
 				return err
 			}
 			if force {
-				fmt.Fprintf(cmd.OutOrStdout(), "✓ Force-stop signal sent to run %s\n", ctx.Manifest.ID)
+				fmt.Fprintf(cmd.OutOrStdout(), "✓ Force-stop signal sent to task %s\n", ctx.Manifest.Task)
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "✓ Stop requested for run %s\n", ctx.Manifest.ID)
-				fmt.Fprintf(cmd.OutOrStdout(), "Check    routurn status %s\n", ctx.Manifest.ID)
+				fmt.Fprintf(cmd.OutOrStdout(), "✓ Stop requested for task %s\n", ctx.Manifest.Task)
+				fmt.Fprintf(cmd.OutOrStdout(), "Check    routurn status %s\n", ctx.Manifest.Task)
 			}
 			return nil
 		},

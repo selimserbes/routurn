@@ -14,8 +14,12 @@ func BuildPlan(root, archive string, strip int) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	p := Plan{Archive: filepath.Base(archive), Entries: entries}
-	for _, entry := range entries {
+	_, payload, err := SplitManifest(entries)
+	if err != nil {
+		return Plan{}, err
+	}
+	p := Plan{Archive: filepath.Base(archive), Entries: payload}
+	for _, entry := range payload {
 		target, err := safeLocalTarget(root, entry.Path)
 		if err != nil {
 			return Plan{}, err

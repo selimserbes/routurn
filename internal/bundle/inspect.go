@@ -18,11 +18,16 @@ type Inspection struct {
 	Files      int               `json:"files"`
 	Bytes      int64             `json:"bytes"`
 	Executable int               `json:"executable"`
+	Manifest   *Manifest         `json:"manifest,omitempty"`
 	Entries    []InspectionEntry `json:"entries"`
 }
 
 func InspectArchive(path string, strip int) (Inspection, error) {
 	entries, err := ReadArchive(path, strip)
+	if err != nil {
+		return Inspection{}, err
+	}
+	manifest, payload, err := SplitManifest(entries)
 	if err != nil {
 		return Inspection{}, err
 	}
@@ -38,13 +43,14 @@ func InspectArchive(path string, strip int) (Inspection, error) {
 	}
 
 	result := Inspection{
-		Archive: filepath.Base(path),
-		Format:  format,
-		Backend: backend,
-		Files:   len(entries),
-		Entries: make([]InspectionEntry, 0, len(entries)),
+		Archive:  filepath.Base(path),
+		Format:   format,
+		Backend:  backend,
+		Files:    len(payload),
+		Manifest: manifest,
+		Entries:  make([]InspectionEntry, 0, len(payload)),
 	}
-	for _, entry := range entries {
+	for _, entry := range payload {
 		result.Bytes += entry.Size
 		if entry.Mode&0o111 != 0 {
 			result.Executable++

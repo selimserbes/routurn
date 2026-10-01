@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	resultstore "github.com/selimserbes/routurn/internal/result"
 	"github.com/selimserbes/routurn/internal/runstate"
 	"github.com/spf13/cobra"
 )
@@ -48,18 +49,32 @@ func newFetchCmd() *cobra.Command {
 				return nil
 			}
 
+			stableResult := ""
 			if attachToRun {
 				manifest.Artifacts = files
 				if err := runstate.Save(ctx.Resolved.Root, manifest); err != nil {
 					return err
 				}
+				if manifest.Status == "SUCCEEDED" {
+					stableResult, _, err = resultstore.Materialize(ctx.Resolved.Root, manifest.Task, manifest.ID, dest)
+					if err != nil {
+						return fmt.Errorf("materialize task result: %w", err)
+					}
+				}
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d artifact(s) for run %s\n", len(files), manifest.ID)
+			fmt.Fprintf(cmd.OutOrStdout(), "Fetched %d artifact(s) for task %s\n", len(files), manifest.Task)
 			for _, file := range files {
 				fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", file)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Saved to %s\n", dest)
+			if stableResult != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Result  %s\n", stableResult)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "Saved to %s\n", dest)
+			}
+			if verbose {
+				fmt.Fprintf(cmd.OutOrStdout(), "Run     %s\n", manifest.ID)
+			}
 			return nil
 		},
 	}

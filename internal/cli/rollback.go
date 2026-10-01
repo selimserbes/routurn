@@ -10,7 +10,7 @@ import (
 
 func newRollbackCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "rollback <update-id|latest>",
+		Use:   "rollback <update-id|latest|previous>",
 		Short: "Restore local files from a previous Routurn update backup",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -26,7 +26,10 @@ func newRollbackCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Rolled back update %s\n", record.ID)
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ Rolled back to the previous local state")
+			if verbose {
+				fmt.Fprintf(cmd.OutOrStdout(), "Update ID %s\n", record.ID)
+			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Run 'routurn sync' to send the restored local state to the remote target.")
 			return nil
 		},

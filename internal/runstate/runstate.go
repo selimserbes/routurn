@@ -15,6 +15,7 @@ type Manifest struct {
 	ID            string   `json:"id"`
 	Project       string   `json:"project"`
 	Target        string   `json:"target"`
+	Endpoint      string   `json:"endpoint,omitempty"`
 	Task          string   `json:"task"`
 	Status        string   `json:"status"`
 	StartedAt     string   `json:"started_at"`
@@ -148,4 +149,19 @@ func LatestByTask(root, task string) (Manifest, error) {
 		}
 	}
 	return Manifest{}, fmt.Errorf("no runs recorded for task %q", task)
+}
+
+// ResolveSelector resolves "latest", an exact run ID, or a task name.
+func ResolveSelector(root, value string) (string, error) {
+	if value == "latest" {
+		return ResolveID(root, value)
+	}
+	if _, err := os.Stat(Dir(root, value)); err == nil {
+		return value, nil
+	}
+	m, err := LatestByTask(root, value)
+	if err != nil {
+		return "", err
+	}
+	return m.ID, nil
 }

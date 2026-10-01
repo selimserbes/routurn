@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/selimserbes/routurn/internal/pathspec"
+	resultstore "github.com/selimserbes/routurn/internal/result"
 )
 
 type FileEntry struct {
@@ -54,6 +55,9 @@ func Scan(root string, excludes []string) (*ScanResult, error) {
 				return filepath.SkipDir
 			}
 			return nil
+		}
+		if d.IsDir() && (rel == "results" || rel == "routurn-results") && resultstore.IsManagedPublicRoot(path) {
+			return filepath.SkipDir
 		}
 		if excluded(rel, excludes) {
 			if d.IsDir() {
@@ -150,4 +154,15 @@ func Diff(previous Manifest, current *ScanResult) Plan {
 	}
 	sort.Strings(deleted)
 	return Plan{Changed: changed, Deleted: deleted}
+}
+
+func Fingerprint(scan *ScanResult) string {
+	h := sha256.New()
+	for _, f := range scan.Files {
+		_, _ = io.WriteString(h, f.Path)
+		_, _ = h.Write([]byte{0})
+		_, _ = io.WriteString(h, f.Hash)
+		_, _ = h.Write([]byte{'\n'})
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }

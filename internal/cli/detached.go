@@ -13,7 +13,7 @@ type runRemoteContext struct {
 	Resolved   *project.Resolved
 	Global     *config.GlobalConfig
 	Manifest   runstate.Manifest
-	Target     config.Target
+	Target     config.Endpoint
 	RemotePath string
 }
 
@@ -22,7 +22,7 @@ func resolveRunRemote(runID string) (*runRemoteContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	id, err := runstate.ResolveID(resolved.Root, runID)
+	id, err := runstate.ResolveSelector(resolved.Root, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -41,10 +41,12 @@ func resolveRunRemote(runID string) (*runRemoteContext, error) {
 	if targetName == "" {
 		targetName = resolved.Config.Remote.Target
 	}
-	target, ok := global.Targets[targetName]
-	if !ok {
-		return nil, fmt.Errorf("target %q is not registered", targetName)
+	resolvedEndpoint, err := remote.ResolveEndpoint(global, targetName, endpointOverride)
+	if err != nil {
+		return nil, err
 	}
+	target := resolvedEndpoint.Endpoint
+	manifest.Endpoint = resolvedEndpoint.EndpointName
 	remotePath := manifest.RemotePath
 	if remotePath == "" {
 		remotePath = resolved.Config.Remote.Path

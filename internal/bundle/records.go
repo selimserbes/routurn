@@ -31,7 +31,7 @@ func List(root string) ([]Record, error) {
 }
 
 func ResolveID(root, value string) (string, error) {
-	if value != "latest" {
+	if value != "latest" && value != "previous" {
 		return value, nil
 	}
 	records, err := List(root)
@@ -44,4 +44,18 @@ func ResolveID(root, value string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no applied updates found")
+}
+
+func SetManagedInfo(root, id, hash, name string) (Record, error) {
+	updateDir := filepath.Join(root, ".routurn", "updates", id)
+	record, err := loadRecord(updateDir)
+	if err != nil {
+		return Record{}, err
+	}
+	record.BundleHash = hash
+	record.BundleName = name
+	if err := writeRecord(updateDir, record); err != nil {
+		return Record{}, err
+	}
+	return record, nil
 }

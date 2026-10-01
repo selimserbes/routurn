@@ -11,7 +11,7 @@ func newLogsCmd() *cobra.Command {
 	var follow bool
 	var lines int
 	cmd := &cobra.Command{
-		Use:   "logs <run-id|latest>",
+		Use:   "logs <task|run-id|latest>",
 		Short: "Show logs for a detached remote run",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -19,8 +19,10 @@ func newLogsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Run      %s\n", ctx.Manifest.ID)
 			fmt.Fprintf(cmd.OutOrStdout(), "Task     %s\n", ctx.Manifest.Task)
+			if verbose {
+				fmt.Fprintf(cmd.OutOrStdout(), "Run      %s\n", ctx.Manifest.ID)
+			}
 			if follow {
 				fmt.Fprintln(cmd.OutOrStdout(), "Following remote logs. Ctrl+C disconnects without stopping the task.")
 			}

@@ -14,13 +14,13 @@ import (
 	"github.com/selimserbes/routurn/internal/config"
 )
 
-func EnsureDir(target config.Target, remotePath string) error {
+func EnsureDir(target config.Endpoint, remotePath string) error {
 	cmd := "mkdir -p " + shellQuote(remotePath)
 	_, err := RunCommand(target, cmd, nil, io.Discard, os.Stderr)
 	return err
 }
 
-func CreateSnapshot(target config.Target, remoteRoot, snapshotID string, paths []string) (string, error) {
+func CreateSnapshot(target config.Endpoint, remoteRoot, snapshotID string, paths []string) (string, error) {
 	if len(paths) == 0 {
 		return "", nil
 	}
@@ -56,7 +56,7 @@ fi
 	return snapshotRel, nil
 }
 
-func UploadTar(target config.Target, localRoot, remoteRoot string, paths []string) error {
+func UploadTar(target config.Endpoint, localRoot, remoteRoot string, paths []string) error {
 	if len(paths) == 0 {
 		return nil
 	}
@@ -132,7 +132,7 @@ func writeTar(w io.Writer, root string, paths []string) error {
 	return tw.Close()
 }
 
-func RemovePaths(target config.Target, remoteRoot string, paths []string) error {
+func RemovePaths(target config.Endpoint, remoteRoot string, paths []string) error {
 	if len(paths) == 0 {
 		return nil
 	}
@@ -150,7 +150,7 @@ done
 	return err
 }
 
-func ListFiles(target config.Target, remoteRoot string) ([]string, error) {
+func ListFiles(target config.Endpoint, remoteRoot string) ([]string, error) {
 	command := fmt.Sprintf("cd %s && find . -type f -print0", shellQuote(remoteRoot))
 	data, err := Capture(target, command)
 	if err != nil {
@@ -177,7 +177,7 @@ func ListFiles(target config.Target, remoteRoot string) ([]string, error) {
 	return out, nil
 }
 
-func ReadTar(target config.Target, remoteRoot string, paths []string) (io.Reader, func() error, error) {
+func ReadTar(target config.Endpoint, remoteRoot string, paths []string) (io.Reader, func() error, error) {
 	args := sshArgs(target, false)
 	remoteCommand := fmt.Sprintf("cd %s && tar -cf - -T -", shellQuote(remoteRoot))
 	args = append(args, Destination(target), remoteCommand)

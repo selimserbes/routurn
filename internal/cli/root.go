@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	projectName string
-	verbose     bool
-	showVersion bool
+	projectName      string
+	verbose          bool
+	showVersion      bool
+	endpointOverride string
 )
 
 func Execute(version string) error {
@@ -32,6 +33,7 @@ func Execute(version string) error {
 	}
 	root.PersistentFlags().StringVarP(&projectName, "project", "p", "", "registered project name (allows running outside the project directory)")
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "show detailed Routurn and SSH diagnostics")
+	root.PersistentFlags().StringVar(&endpointOverride, "endpoint", "", "use a specific target endpoint for this command without changing the saved route")
 	root.Flags().BoolVarP(&showVersion, "version", "V", false, "print Routurn version")
 
 	root.AddCommand(
@@ -43,15 +45,19 @@ func Execute(version string) error {
 		newProjectCmd(),
 		newStatusCmd(),
 		newBundleCmd(),
+		newUpdateCmd(),
 		newApplyCmd(),
+		newUpdatesCmd(),
 		newRollbackCmd(),
 		newSyncCmd(),
 		newRunCmd(),
 		newLogsCmd(),
 		newStopCmd(),
 		newFetchCmd(),
+		newResultCmd(),
 		newExecCmd(),
 		newRunsCmd(),
+		newCleanCmd(),
 	)
 	return root.Execute()
 }

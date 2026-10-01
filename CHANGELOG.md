@@ -10,11 +10,27 @@ The project follows Semantic Versioning.
 
 - `routurn bundle inspect` for validating and inspecting update archives without modifying a project.
 - Optional `.7z` and `.rar` update support through a validated local 7-Zip-compatible importer (`7zz`, `7z`, or `7za`).
+- `routurn update` with terminal-based update selection, direct path input, and conservative recent-bundle discovery.
+- Routurn bundle manifests (`routurn-bundle.toml`) for project identity and optional base-state fingerprint validation.
+- `routurn bundle fingerprint` for generating the current project-state identity used by compatible update bundles.
+- Content-addressed managed update storage with SHA-256 deduplication and verified source consumption.
+- Stable latest successful task results under `.routurn/results/<task>/` plus `routurn result <task>`.
+- Short user-facing task result views under `results/<task>/` (or collision-safe `routurn-results/<task>/`), including `latest.<ext>` for single-artifact tasks and `routurn result <task> --path`.
+- Human-friendly task selectors for status, logs, stop, and fetch workflows so internal run IDs are normally optional.
+- `routurn updates`, `routurn rollback previous`, and `routurn clean --dry-run`.
+- Automatic bounded retention for local run history, update backups, managed update bundles, remote sync snapshots, and completed detached-run state.
+- Logical SSH targets with multiple named endpoints for alternate routes to the same remote machine.
+- Automatic endpoint failover with priority ordering and short-lived last-success routing cache.
+- Persistent interactive route selection with `routurn target route`, one-command `--endpoint` overrides, endpoint management, target merging, and `routurn target test`.
+- `routurn status --check` for endpoint reachability and selected-route reporting.
 
 ### Security
 
 - Reject control characters, Windows drive/ADS/reserved-name paths, and Windows trailing-dot/space aliases before applying updates.
 - External archive import streams file contents through stdout and rejects links, special files, encrypted entries, duplicate normalized paths, and size-limit violations before project writes.
+- Automatic recent-update selection requires both a matching project identity and matching base-state fingerprint; Routurn does not guess based on filenames alone.
+- Source update archives are removed only after a verified managed copy is safely registered; unrelated files are never cleaned from user directories.
+- Automatic SSH failover is restricted to endpoints explicitly grouped under the same logical target; Routurn never guesses that an unrelated target is a safe substitute.
 
 ## [0.1.0] - 2026-10-01
 

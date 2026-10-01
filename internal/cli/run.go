@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/selimserbes/routurn/internal/retention"
 	"github.com/selimserbes/routurn/internal/runstate"
 
 	"github.com/spf13/cobra"
@@ -19,13 +20,16 @@ func newRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer func() {
+				_, _ = retention.PruneProject(ctx.Resolved.Root, retention.DefaultRuns, retention.DefaultUpdates, false)
+			}()
 			taskName := args[0]
 			if _, ok := ctx.Resolved.Config.Tasks[taskName]; !ok {
 				return fmt.Errorf("task %q is not defined in routurn.toml", taskName)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Routurn · %s\n", ctx.Resolved.Config.Name)
-			fmt.Fprintf(cmd.OutOrStdout(), "Target   %s\n", ctx.Resolved.Config.Remote.Target)
+			printResolvedTarget(cmd.OutOrStdout(), ctx)
 			fmt.Fprintf(cmd.OutOrStdout(), "Task     %s\n", taskName)
 
 			if detach {
@@ -37,14 +41,14 @@ func newRunCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "Run      %s\n", result.Manifest.ID)
 				fmt.Fprintf(cmd.OutOrStdout(), "PID      %d\n", result.Manifest.RemotePID)
 				fmt.Fprintln(cmd.OutOrStdout(), "✓ Detached task started")
-				fmt.Fprintf(cmd.OutOrStdout(), "Watch    routurn logs %s --follow\n", result.Manifest.ID)
-				fmt.Fprintf(cmd.OutOrStdout(), "Status   routurn status %s\n", result.Manifest.ID)
+				fmt.Fprintf(cmd.OutOrStdout(), "Watch    routurn logs %s --follow\n", taskName)
+				fmt.Fprintf(cmd.OutOrStdout(), "Status   routurn status %s\n", taskName)
 				return nil
 			}
 
 			result := runTask(ctx, taskName, runstate.Manifest{}, stdinForTask(), cmd.OutOrStdout(), cmd.ErrOrStderr())
-			if result.RunDir != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "Result   %s\n", result.RunDir)
+			if verbose && result.RunDir != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "History  %s\n", result.RunDir)
 			}
 			if result.Err != nil {
 				fmt.Fprintln(cmd.OutOrStdout(), "✗ Task failed")

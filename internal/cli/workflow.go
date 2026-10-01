@@ -16,28 +16,43 @@ import (
 )
 
 type projectContext struct {
-	Resolved *project.Resolved
-	Global   *config.GlobalConfig
-	Target   config.Target
+	Resolved     *project.Resolved
+	Global       *config.GlobalConfig
+	TargetName   string
+	EndpointName string
+	Endpoint     config.Endpoint
+	Route        string
 }
 
-func resolveProjectContext() (*projectContext, error) {
+func resolveLocalProjectContext() (*projectContext, error) {
 	resolved, err := project.Resolve(projectName)
 	if err != nil {
 		return nil, err
-	}
-	if resolved.Config.Remote.Target == "" || resolved.Config.Remote.Path == "" {
-		return nil, fmt.Errorf("project remote target/path is not configured in %s", config.ProjectFileName)
 	}
 	global, err := config.LoadGlobal()
 	if err != nil {
 		return nil, err
 	}
-	target, ok := global.Targets[resolved.Config.Remote.Target]
-	if !ok {
-		return nil, fmt.Errorf("target %q is not registered; use 'routurn target add ...'", resolved.Config.Remote.Target)
+	return &projectContext{Resolved: resolved, Global: global}, nil
+}
+
+func resolveProjectContext() (*projectContext, error) {
+	ctx, err := resolveLocalProjectContext()
+	if err != nil {
+		return nil, err
 	}
-	return &projectContext{Resolved: resolved, Global: global, Target: target}, nil
+	if ctx.Resolved.Config.Remote.Target == "" || ctx.Resolved.Config.Remote.Path == "" {
+		return nil, fmt.Errorf("project remote target/path is not configured in %s", config.ProjectFileName)
+	}
+	resolvedEndpoint, err := remote.ResolveEndpoint(ctx.Global, ctx.Resolved.Config.Remote.Target, endpointOverride)
+	if err != nil {
+		return nil, err
+	}
+	ctx.TargetName = resolvedEndpoint.TargetName
+	ctx.EndpointName = resolvedEndpoint.EndpointName
+	ctx.Endpoint = resolvedEndpoint.Endpoint
+	ctx.Route = resolvedEndpoint.Route
+	return ctx, nil
 }
 
 type syncResult struct {
@@ -78,7 +93,7 @@ func performSync(ctx *projectContext, out io.Writer, dryRun bool, snapshotID str
 		return syncResult{Changed: changed, Deleted: plan.Deleted}, nil
 	}
 
-	if err := remote.EnsureDir(ctx.Target, ctx.Resolved.Config.Remote.Path); err != nil {
+	if err := remote.EnsureDir(ctx.Endpoint, ctx.Resolved.Config.Remote.Path); err != nil {
 		return syncResult{}, fmt.Errorf("ensure remote project path: %w", err)
 	}
 
@@ -86,7 +101,7 @@ func performSync(ctx *projectContext, out io.Writer, dryRun bool, snapshotID str
 		snapshotID = runstate.NewID()
 	}
 	snapshotPaths := append(append([]string{}, changed...), plan.Deleted...)
-	snapshot, err := remote.CreateSnapshot(ctx.Target, ctx.Resolved.Config.Remote.Path, snapshotID, snapshotPaths)
+	snapshot, err := remote.CreateSnapshot(ctx.Endpoint, ctx.Resolved.Config.Remote.Path, snapshotID, snapshotPaths)
 	if err != nil {
 		return syncResult{}, err
 	}
@@ -96,19 +111,24 @@ func performSync(ctx *projectContext, out io.Writer, dryRun bool, snapshotID str
 
 	if len(changed) > 0 {
 		fmt.Fprintf(out, "Upload   %d file(s)\n", len(changed))
-		if err := remote.UploadTar(ctx.Target, ctx.Resolved.Root, ctx.Resolved.Config.Remote.Path, changed); err != nil {
+		if err := remote.UploadTar(ctx.Endpoint, ctx.Resolved.Root, ctx.Resolved.Config.Remote.Path, changed); err != nil {
 			return syncResult{}, err
 		}
 	}
 	if len(plan.Deleted) > 0 {
 		fmt.Fprintf(out, "Delete   %d remote file(s)\n", len(plan.Deleted))
-		if err := remote.RemovePaths(ctx.Target, ctx.Resolved.Config.Remote.Path, plan.Deleted); err != nil {
+		if err := remote.RemovePaths(ctx.Endpoint, ctx.Resolved.Config.Remote.Path, plan.Deleted); err != nil {
 			return syncResult{}, err
 		}
 	}
 
 	if err := syncer.SaveManifest(ctx.Resolved.Root, syncer.ToManifest(scan)); err != nil {
 		return syncResult{}, err
+	}
+	if snapshot != "" {
+		if _, pruneErr := remote.PruneSnapshots(ctx.Endpoint, ctx.Resolved.Config.Remote.Path, remote.DefaultSnapshotRetention); pruneErr != nil && verbose {
+			fmt.Fprintf(out, "! remote snapshot cleanup: %v\n", pruneErr)
+		}
 	}
 	fmt.Fprintln(out, "✓ Sync complete")
 	return syncResult{Changed: changed, Deleted: plan.Deleted, Snapshot: snapshot}, nil
@@ -131,6 +151,7 @@ func runTask(ctx *projectContext, taskName string, manifest runstate.Manifest, s
 			ID:         runstate.NewID(),
 			Project:    ctx.Resolved.Config.Name,
 			Target:     ctx.Resolved.Config.Remote.Target,
+			Endpoint:   ctx.EndpointName,
 			Task:       taskName,
 			Status:     "RUNNING",
 			StartedAt:  time.Now().UTC().Format(time.RFC3339),
@@ -141,6 +162,9 @@ func runTask(ctx *projectContext, taskName string, manifest runstate.Manifest, s
 		}
 	} else {
 		manifest.Status = "RUNNING"
+		if manifest.Endpoint == "" {
+			manifest.Endpoint = ctx.EndpointName
+		}
 		if manifest.StartedAt == "" {
 			manifest.StartedAt = time.Now().UTC().Format(time.RFC3339)
 		}
@@ -156,10 +180,12 @@ func runTask(ctx *projectContext, taskName string, manifest runstate.Manifest, s
 	defer stdoutLog.Close()
 	defer stderrLog.Close()
 
-	fmt.Fprintf(stdout, "Run      %s\n", manifest.ID)
+	if verbose {
+		fmt.Fprintf(stdout, "Run      %s\n", manifest.ID)
+	}
 	fmt.Fprintln(stdout, "────────────────────────────────────────")
 	exitCode, runErr := remote.RunWithIO(
-		ctx.Target,
+		ctx.Endpoint,
 		ctx.Resolved.Config.Remote.Path,
 		task.Command,
 		task.Interactive,
@@ -194,6 +220,7 @@ func runTaskDetached(ctx *projectContext, taskName string, manifest runstate.Man
 			ID:         runstate.NewID(),
 			Project:    ctx.Resolved.Config.Name,
 			Target:     ctx.Resolved.Config.Remote.Target,
+			Endpoint:   ctx.EndpointName,
 			Task:       taskName,
 			Status:     "RUNNING",
 			StartedAt:  time.Now().UTC().Format(time.RFC3339),
@@ -205,6 +232,9 @@ func runTaskDetached(ctx *projectContext, taskName string, manifest runstate.Man
 		}
 	} else {
 		manifest.Status = "RUNNING"
+		if manifest.Endpoint == "" {
+			manifest.Endpoint = ctx.EndpointName
+		}
 		manifest.Detached = true
 		manifest.RemotePath = ctx.Resolved.Config.Remote.Path
 		if manifest.StartedAt == "" {
@@ -215,7 +245,7 @@ func runTaskDetached(ctx *projectContext, taskName string, manifest runstate.Man
 		}
 	}
 
-	pid, err := remote.StartDetached(ctx.Target, ctx.Resolved.Config.Remote.Path, manifest.ID, task.Command)
+	pid, err := remote.StartDetached(ctx.Endpoint, ctx.Resolved.Config.Remote.Path, manifest.ID, task.Command)
 	if err != nil {
 		manifest.Status = "FAILED"
 		manifest.FinishedAt = time.Now().UTC().Format(time.RFC3339)
@@ -224,6 +254,7 @@ func runTaskDetached(ctx *projectContext, taskName string, manifest runstate.Man
 	}
 	manifest.RemotePID = pid
 	_ = runstate.Save(ctx.Resolved.Root, manifest)
+	_, _ = remote.PruneDetachedRuns(ctx.Endpoint, ctx.Resolved.Config.Remote.Path, remote.DefaultDetachedRetention)
 	return taskRunResult{Manifest: manifest, RunDir: runstate.Dir(ctx.Resolved.Root, manifest.ID)}
 }
 
@@ -235,7 +266,7 @@ func fetchTaskArtifacts(ctx *projectContext, taskName, dest string) ([]string, e
 	if len(task.Artifacts) == 0 {
 		return nil, nil
 	}
-	return artifact.Fetch(ctx.Target, ctx.Resolved.Config.Remote.Path, task.Artifacts, dest)
+	return artifact.Fetch(ctx.Endpoint, ctx.Resolved.Config.Remote.Path, task.Artifacts, dest)
 }
 
 func relativePaths(root string, paths []string) []string {
@@ -248,6 +279,12 @@ func relativePaths(root string, paths []string) []string {
 		}
 	}
 	return out
+}
+
+func printResolvedTarget(out io.Writer, ctx *projectContext) {
+	fmt.Fprintf(out, "Target   %s\n", ctx.TargetName)
+	fmt.Fprintf(out, "Route    %s\n", ctx.Route)
+	fmt.Fprintf(out, "Endpoint %s (%s)\n", ctx.EndpointName, remote.Destination(ctx.Endpoint))
 }
 
 func stdinForTask() io.Reader {

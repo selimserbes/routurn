@@ -63,3 +63,22 @@ Before creating a release tag:
 The tag-driven release workflow validates the tag and changelog, rebuilds and tests Routurn, creates cross-platform archives, verifies the embedded version, generates SHA-256 checksums, and publishes the GitHub Release using the changelog-derived notes.
 
 Tags containing a suffix such as `v0.2.0-rc.1` are published as prereleases. Stable tags are marked as the latest release.
+
+## Update bundle fixtures
+
+New user-facing update bundles should include a root-level `routurn-bundle.toml` when the project identity and base state are known:
+
+```toml
+schema = 1
+
+[bundle]
+name = "example-fix"
+
+[project]
+name = "example-project"
+
+[base]
+fingerprint = "sha256:..."
+```
+
+The manifest is metadata and must not be applied into the project tree. Tests that change update intake behavior should cover project mismatch, base-state mismatch, SHA-256 deduplication, source-consumption safety, and legacy bundles without a manifest.

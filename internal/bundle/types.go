@@ -29,6 +29,8 @@ type Record struct {
 	Added      []string `json:"added,omitempty"`
 	Modified   []string `json:"modified,omitempty"`
 	Backup     string   `json:"backup,omitempty"`
+	BundleHash string   `json:"bundle_hash,omitempty"`
+	BundleName string   `json:"bundle_name,omitempty"`
 	RolledBack bool     `json:"rolled_back,omitempty"`
 	RollbackAt string   `json:"rollback_at,omitempty"`
 }

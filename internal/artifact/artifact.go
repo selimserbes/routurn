@@ -14,7 +14,7 @@ import (
 	"github.com/selimserbes/routurn/internal/remote"
 )
 
-func Fetch(target config.Target, remoteRoot string, patterns []string, dest string) ([]string, error) {
+func Fetch(target config.Endpoint, remoteRoot string, patterns []string, dest string) ([]string, error) {
 	if len(patterns) == 0 {
 		return nil, nil
 	}

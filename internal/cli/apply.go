@@ -4,10 +4,14 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/selimserbes/routurn/internal/bundle"
+	"github.com/selimserbes/routurn/internal/config"
 	"github.com/selimserbes/routurn/internal/project"
+	"github.com/selimserbes/routurn/internal/retention"
+	"github.com/selimserbes/routurn/internal/syncer"
 	"github.com/spf13/cobra"
 )
 
@@ -15,6 +19,8 @@ type applyOptions struct {
 	DryRun          bool
 	Yes             bool
 	StripComponents int
+	ManagedHash     string
+	ManagedName     string
 }
 
 func newApplyCmd() *cobra.Command {
@@ -28,6 +34,9 @@ func newApplyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer func() {
+				_, _ = retention.PruneProject(resolved.Root, retention.DefaultRuns, retention.DefaultUpdates, false)
+			}()
 			_, _, err = applyBundle(cmd, resolved.Root, args[0], opts)
 			return err
 		},
@@ -41,6 +50,41 @@ func newApplyCmd() *cobra.Command {
 func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (bundle.Record, bool, error) {
 	if _, err := os.Stat(archive); err != nil {
 		return bundle.Record{}, false, fmt.Errorf("update archive: %w", err)
+	}
+	manifest, err := bundle.ManifestFromArchive(archive, opts.StripComponents)
+	if err != nil {
+		return bundle.Record{}, false, err
+	}
+	if manifest != nil {
+		cfg, cfgErr := config.LoadProject(root)
+		if cfgErr != nil {
+			return bundle.Record{}, false, cfgErr
+		}
+		if manifest.Project.Name != "" && manifest.Project.Name != cfg.Name {
+			return bundle.Record{}, false, fmt.Errorf("update belongs to project %q; current project is %q", manifest.Project.Name, cfg.Name)
+		}
+		if manifest.Base.Fingerprint != "" {
+			scan, scanErr := syncer.Scan(root, cfg.Sync.Exclude)
+			if scanErr != nil {
+				return bundle.Record{}, false, fmt.Errorf("fingerprint project: %w", scanErr)
+			}
+			rootAbs, _ := filepath.Abs(root)
+			archiveAbs, _ := filepath.Abs(archive)
+			if rel, relErr := filepath.Rel(rootAbs, archiveAbs); relErr == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				rel = filepath.ToSlash(rel)
+				filtered := scan.Files[:0]
+				for _, file := range scan.Files {
+					if file.Path != rel {
+						filtered = append(filtered, file)
+					}
+				}
+				scan.Files = filtered
+			}
+			current := syncer.Fingerprint(scan)
+			if current != manifest.Base.Fingerprint {
+				return bundle.Record{}, false, fmt.Errorf("update was created for a different project state\nexpected: %s\ncurrent:  %s", manifest.Base.Fingerprint, current)
+			}
+		}
 	}
 	plan, err := bundle.BuildPlan(root, archive, opts.StripComponents)
 	if err != nil {
@@ -81,11 +125,22 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 	if err != nil {
 		return bundle.Record{}, false, err
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "✓ Update applied · %s\n", record.ID)
+	if opts.ManagedHash != "" || opts.ManagedName != "" {
+		updated, metaErr := bundle.SetManagedInfo(root, record.ID, opts.ManagedHash, opts.ManagedName)
+		if metaErr != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "! update applied, but managed metadata could not be recorded: %v\n", metaErr)
+		} else {
+			record = updated
+		}
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "✓ Update applied")
 	if record.Backup != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Backup   %s\n", record.Backup)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Rollback routurn rollback %s\n", record.ID)
+	fmt.Fprintln(cmd.OutOrStdout(), "Rollback routurn rollback previous")
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStdout(), "Update ID %s\n", record.ID)
+	}
 	return record, true, nil
 }
 

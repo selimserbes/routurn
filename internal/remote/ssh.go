@@ -57,14 +57,14 @@ func shellDisplayQuote(value string) string {
 	return shellQuote(value)
 }
 
-func Destination(target config.Target) string {
+func Destination(target config.Endpoint) string {
 	if target.User == "" {
 		return target.Host
 	}
 	return target.User + "@" + target.Host
 }
 
-func sshArgs(target config.Target, interactive bool) []string {
+func sshArgs(target config.Endpoint, interactive bool) []string {
 	args := []string{
 		"-o", "ServerAliveInterval=30",
 		"-o", "ServerAliveCountMax=3",
@@ -99,12 +99,12 @@ func sshControlPath() string {
 	return filepath.Join(dir, "%C")
 }
 
-func Run(target config.Target, remotePath, command string, interactive bool) error {
+func Run(target config.Endpoint, remotePath, command string, interactive bool) error {
 	_, err := RunWithIO(target, remotePath, command, interactive, os.Stdin, os.Stdout, os.Stderr)
 	return err
 }
 
-func RunWithIO(target config.Target, remotePath, command string, interactive bool, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+func RunWithIO(target config.Endpoint, remotePath, command string, interactive bool, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	args := sshArgs(target, interactive)
 	remoteCommand := fmt.Sprintf("cd %s && exec sh -lc %s", shellQuote(remotePath), shellQuote(command))
 	args = append(args, Destination(target), remoteCommand)
@@ -124,7 +124,7 @@ func RunWithIO(target config.Target, remotePath, command string, interactive boo
 	return 0, nil
 }
 
-func RunCommand(target config.Target, command string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+func RunCommand(target config.Endpoint, command string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	args := sshArgs(target, false)
 	args = append(args, Destination(target), command)
 	debugCommand("ssh", args)
@@ -141,7 +141,7 @@ func RunCommand(target config.Target, command string, stdin io.Reader, stdout, s
 	return 0, nil
 }
 
-func Capture(target config.Target, command string) ([]byte, error) {
+func Capture(target config.Endpoint, command string) ([]byte, error) {
 	var stdout, stderr bytes.Buffer
 	_, err := RunCommand(target, command, nil, &stdout, &stderr)
 	if err != nil {
@@ -159,4 +159,35 @@ func ShellQuote(value string) string {
 
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+// Probe checks whether an SSH endpoint can be reached non-interactively. It is
+// used only for automatic route selection, so it deliberately avoids password
+// prompts and uses a short connection timeout.
+func Probe(target config.Endpoint, timeoutSeconds int) error {
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 2
+	}
+	args := sshArgs(target, false)
+	args = append(args,
+		"-o", "BatchMode=yes",
+		"-o", "ConnectionAttempts=1",
+		"-o", "ConnectTimeout="+strconv.Itoa(timeoutSeconds),
+		Destination(target),
+		"true",
+	)
+	debugCommand("ssh", args)
+	cmd := exec.Command("ssh", args...)
+	var stderr bytes.Buffer
+	cmd.Stdin = nil
+	cmd.Stdout = io.Discard
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg != "" {
+			return fmt.Errorf("%s", msg)
+		}
+		return err
+	}
+	return nil
 }

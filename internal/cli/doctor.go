@@ -58,22 +58,27 @@ func newDoctorCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			target, ok := global.Targets[resolved.Config.Remote.Target]
-			if !ok {
+			if _, ok := global.Targets[resolved.Config.Remote.Target]; !ok {
 				fmt.Fprintf(cmd.OutOrStdout(), "✗ target   %s is not registered\n", resolved.Config.Remote.Target)
 				failed = true
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "✓ target   %s (%s)\n", resolved.Config.Remote.Target, remote.Destination(target))
-				probe := "for c in sh tar find; do command -v \"$c\" || exit 42; done"
-				data, probeErr := remote.Capture(target, probe)
-				if probeErr != nil {
-					fmt.Fprintf(cmd.OutOrStdout(), "✗ remote   SSH/capability check failed: %v\n", probeErr)
+				selected, selectErr := remote.ResolveEndpoint(global, resolved.Config.Remote.Target, endpointOverride)
+				if selectErr != nil {
+					fmt.Fprintf(cmd.OutOrStdout(), "✗ target   %s: %v\n", resolved.Config.Remote.Target, selectErr)
 					failed = true
 				} else {
-					lines := strings.Fields(string(data))
-					fmt.Fprintln(cmd.OutOrStdout(), "✓ remote   SSH connection works")
-					if len(lines) >= 3 {
-						fmt.Fprintln(cmd.OutOrStdout(), "✓ tools    remote sh, tar, and find available")
+					fmt.Fprintf(cmd.OutOrStdout(), "✓ target   %s route=%s endpoint=%s (%s)\n", resolved.Config.Remote.Target, selected.Route, selected.EndpointName, remote.Destination(selected.Endpoint))
+					probe := "for c in sh tar find; do command -v \"$c\" || exit 42; done"
+					data, probeErr := remote.Capture(selected.Endpoint, probe)
+					if probeErr != nil {
+						fmt.Fprintf(cmd.OutOrStdout(), "✗ remote   SSH/capability check failed: %v\n", probeErr)
+						failed = true
+					} else {
+						lines := strings.Fields(string(data))
+						fmt.Fprintln(cmd.OutOrStdout(), "✓ remote   SSH connection works")
+						if len(lines) >= 3 {
+							fmt.Fprintln(cmd.OutOrStdout(), "✓ tools    remote sh, tar, and find available")
+						}
 					}
 				}
 			}

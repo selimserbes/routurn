@@ -109,6 +109,12 @@ routurn doctor
 
 routurn target add <name> --host <host> [--user <user>]
 routurn target list
+routurn target endpoint add <target> <endpoint> --host <host> [--user <user>]
+routurn target endpoint list <target>
+routurn target endpoint remove <target> <endpoint>
+routurn target merge <target> <other-target> --primary-name <name> --as <name>
+routurn target route <target> [auto|endpoint]
+routurn target test [target]
 routurn target remove <name>
 
 routurn project add [path] [--name <name>]
@@ -116,18 +122,23 @@ routurn project list
 routurn project show <name>
 routurn project remove <name>
 
-routurn status [run-id|latest]
+routurn status [task|run-id|latest] [--check]
 routurn bundle inspect <update-archive> [--json]
+routurn bundle fingerprint [--json]
+routurn update [archive] [--recent] [--dry-run] [-y]
 routurn apply <update-archive> [--dry-run] [-y]
-routurn rollback <update-id|latest>
+routurn updates
+routurn rollback <update-id|latest|previous>
 routurn sync [--dry-run]
 routurn run <task> [--detach]
-routurn logs <run-id|latest> [--follow]
-routurn stop <run-id|latest> [--force]
+routurn logs <task|run-id|latest> [--follow]
+routurn stop <task|run-id|latest> [--force]
 routurn fetch [task|run-id|latest]
-routurn exec <task> [update-archive] [--detach]
+routurn result <task>
+routurn exec <task> [--update [recent|latest|path]] [--detach]
 routurn runs
 routurn runs show <run-id|latest> [--json]
+routurn clean [--dry-run]
 
 routurn version
 routurn --version
@@ -141,6 +152,7 @@ CLI conventions:
 help           help command
 -V, --version  version
 -v, --verbose  detailed diagnostics
+--endpoint <name>  one-command endpoint override
 ```
 
 All project commands can also be used outside the project directory with a registered project name:
@@ -214,29 +226,140 @@ routurn target add remote-dev \
 
 `dev.example.com` is documentation-only. In real use, `--host` can be a hostname, IP address, or an alias from `~/.ssh/config`.
 
+### Multiple routes to the same remote machine
+
+A logical Routurn target can have more than one named SSH endpoint. This is useful when the same workstation is reachable through a fast local network while on site and a VPN, overlay network, bastion route, or alternate address while away.
+
+Existing single-route targets remain valid. Two existing target records can be explicitly grouped as routes to the same logical machine:
+
+```bash
+routurn target add remote-dev --host dev-lan.example.com --user developer
+routurn target add remote-dev-vpn --host dev-vpn.example.com --user developer
+
+routurn target merge remote-dev remote-dev-vpn \
+  --primary-name lan \
+  --as vpn \
+  --remove-source
+```
+
+The merge is an explicit declaration that both routes reach the same remote machine. Routurn never falls back to an unrelated target merely because the configured target is unreachable.
+
+Use automatic routing:
+
+```bash
+routurn target route remote-dev auto
+routurn status --check
+```
+
+In `auto` mode Routurn uses a short non-interactive SSH probe, prefers the recently successful endpoint during rapid iteration, then falls back through endpoint priority order. One endpoint is resolved and pinned for the whole command workflow, so a single `exec` does not switch addresses midway through sync, run, and artifact fetch.
+
+Choose a persistent route interactively:
+
+```bash
+routurn target route remote-dev
+```
+
+or explicitly:
+
+```bash
+routurn target route remote-dev vpn
+```
+
+Override the saved route for only one command:
+
+```bash
+routurn --endpoint vpn exec test
+```
+
+Add another endpoint directly when the logical target already exists:
+
+```bash
+routurn target endpoint add remote-dev backup \
+  --host dev-backup.example.com \
+  --user developer \
+  --priority 30
+```
+
+Lower priority numbers are preferred by automatic routing. `routurn target test remote-dev` checks every configured endpoint; `routurn status --check` also reports the endpoint Routurn would select for the current project.
+
 
 ## AI/chat update archives
 
-Routurn can safely consume an update archive received from a chat-based AI or another developer without manually extracting it into the project. The local project remains the source of truth.
+Routurn can safely consume an update archive received from a chat-based AI or another developer without asking the user to manually extract, rename, or clean up the download. The local project remains the source of truth.
 
-Preview an update:
+### Human-friendly update selection
+
+The normal interactive workflow is:
 
 ```bash
-routurn apply ~/Downloads/update.zip --dry-run
+routurn update
 ```
 
-Apply it after reviewing the file plan:
+Routurn presents a terminal menu with recent compatible updates, a terminal file browser, direct path entry, and the latest previously managed update. The file can live anywhere the user can access; Routurn does not require a hard-coded Downloads directory.
+
+An explicit path is always supported:
 
 ```bash
-routurn apply ~/Downloads/update.zip
+routurn update /path/to/update.zip
 ```
 
-Routurn rejects path traversal, archive symlinks/special files, `.git/`, `.routurn/`, and writes through symlinked parent directories. Existing files are backed up under `.routurn/updates/<update-id>/` before replacement.
-
-Rollback the most recent applied update:
+For a safe automatic choice:
 
 ```bash
-routurn rollback latest
+routurn update --recent
+```
+
+Automatic discovery is intentionally conservative. Routurn checks a small set of normal user locations (including the last directory used, current directory, standard user directories, and the system temporary directory), never recursively scans the whole disk, deduplicates candidates by SHA-256, and only auto-classifies a bundle as compatible when its manifest identifies the current project **and** its base fingerprint matches the current project state. If multiple distinct compatible bundles remain, Routurn asks instead of guessing.
+
+### Managed ownership and download cleanup
+
+`routurn update` imports the selected archive into Routurn-managed persistent storage before applying it. The copy is verified by SHA-256. After the managed copy is safely registered, the original selected archive is removed by default so browser downloads such as `update.zip`, `update (1).zip`, and `update (2).zip` do not accumulate indefinitely.
+
+Use `--keep-source` when the original archive should remain in place:
+
+```bash
+routurn update /mnt/share/update.zip --keep-source
+```
+
+Routurn never deletes unrelated files from Downloads, Desktop, or any other directory. It only removes the exact archive the user selected or explicitly supplied, and only after a verified managed copy exists.
+
+Managed bundles use content-addressed storage under the platform's user data directory. Identical archives are stored once even when the browser gave them different filenames.
+
+### Bundle identity and compatibility
+
+New Routurn bundles can include a root-level `routurn-bundle.toml`:
+
+```toml
+schema = 1
+
+[bundle]
+name = "example-fix"
+
+[project]
+name = "example-project"
+
+[base]
+fingerprint = "sha256:..."
+```
+
+The manifest is metadata and is not written into the project. Routurn rejects a bundle that names a different project. When a base fingerprint is present, Routurn also rejects an update created for a different project state. Legacy archives without a manifest remain available through manual selection/path workflows, but Routurn warns that project/base identity cannot be verified and they are not eligible for automatic `--recent` selection.
+
+Filenames are not identities. `update.zip` and `update (7).zip` are equivalent when their content hash is identical.
+
+### Safety and rollback
+
+Routurn rejects path traversal, archive symlinks/special files, `.git/`, `.routurn/`, and writes through symlinked parent directories. Existing files are backed up under `.routurn/updates/` before replacement.
+
+Rollback the latest applied update to the previous local state:
+
+```bash
+routurn rollback previous
+```
+
+`routurn rollback latest` remains equivalent. Show the human-readable update history with:
+
+```bash
+routurn updates
 ```
 
 After rollback, `routurn sync` sends the restored local state back to the remote target.
@@ -254,8 +377,8 @@ Archive support:
 Inspect any supported bundle without modifying a project:
 
 ```bash
-routurn bundle inspect ~/Downloads/update.7z
-routurn bundle inspect ~/Downloads/update.rar --json
+routurn bundle inspect /path/to/update.7z
+routurn bundle inspect /path/to/update.rar --json
 ```
 
 `routurn doctor` reports whether the optional `.7z`/`.rar` importer is available. ZIP/TAR support does not depend on it.
@@ -263,33 +386,50 @@ routurn bundle inspect ~/Downloads/update.rar --json
 Archives that contain one extra top-level directory can be handled explicitly:
 
 ```bash
-routurn apply update.zip --strip-components 1
+routurn update /path/to/update.zip --strip-components 1
 ```
 
-### Update + remote test in one command
+### Update + remote task in one command
 
-A chat workflow can collapse the complete loop into one command:
+Open the interactive update chooser, apply the selected bundle, sync, run, and fetch artifacts:
 
 ```bash
-routurn exec test ~/Downloads/update.zip
+routurn exec test --update
 ```
+
+Use the safe recent-bundle discovery mode:
+
+```bash
+routurn exec test --update recent
+```
+
+Or supply a path directly:
+
+```bash
+routurn exec test --update /path/to/update.zip
+```
+
+`--update=/path/to/update.zip` is also accepted. The older positional `routurn exec test update.zip` form remains for compatibility, but the managed `--update` workflow is recommended.
 
 Routurn then performs:
 
 ```text
-inspect + apply local update
-→ create local backup
+validate bundle identity + safety
+→ import/deduplicate into managed storage
+→ optionally remove the original download
+→ apply local update + create rollback backup
 → sync changed local files to remote
 → create remote snapshot
 → run the configured task with live terminal output
 → fetch declared artifacts
-→ save the run manifest and logs
+→ materialize the latest successful task result
+→ prune bounded local history
 ```
 
-For scripted or AI-controlled local automation, confirmation can be explicitly disabled:
+For scripted automation, confirmation can be explicitly disabled:
 
 ```bash
-routurn exec test ~/Downloads/update.zip --yes
+routurn exec test --update /path/to/update.zip --yes
 ```
 
 ## Sync safety
@@ -302,7 +442,7 @@ It maintains a local content-hash manifest under `.routurn/` and synchronizes on
 <remote-project>/.routurn/snapshots/<run-id>.tar
 ```
 
-`.git/` and `.routurn/` are always excluded from project synchronization.
+Routurn automatically keeps the newest 10 remote sync snapshots so this internal safety history does not grow without bound. `.git/` and `.routurn/` are always excluded from project synchronization.
 
 Preview a sync without changing the remote target:
 
@@ -334,19 +474,19 @@ Long training, build, simulation, and benchmark jobs can continue after the loca
 routurn run train --detach
 ```
 
-Routurn starts the task in the background on the remote machine and returns a run ID. No Routurn daemon or binary is installed remotely. The run is represented by small state and log files under the remote project's `.routurn/runs/<run-id>/` directory.
+Routurn starts the task in the background on the remote machine. No Routurn daemon or binary is installed remotely. Internal run IDs remain available for audit/debug history, but normal commands can address the task by name. The remote run is represented by small state and log files under the remote project's `.routurn/runs/<run-id>/` directory. Routurn preserves running jobs and automatically bounds completed detached-run state history.
 
 Check whether it is still running:
 
 ```bash
+routurn status train
 routurn status latest
-routurn status <run-id>
 ```
 
 Reconnect to its logs without stopping it:
 
 ```bash
-routurn logs latest --follow
+routurn logs train --follow
 ```
 
 `Ctrl+C` disconnects the log viewer; it does not stop the remote task.
@@ -354,13 +494,13 @@ routurn logs latest --follow
 Request a graceful stop:
 
 ```bash
-routurn stop latest
+routurn stop train
 ```
 
 Or force-stop it when necessary:
 
 ```bash
-routurn stop latest --force
+routurn stop train --force
 ```
 
 The complete sync + run loop can also be detached:
@@ -372,7 +512,7 @@ routurn exec train --detach
 Because the local Routurn process exits immediately after launching a detached task, artifact collection is intentionally deferred. After the task finishes, collect its configured outputs with:
 
 ```bash
-routurn fetch latest
+routurn fetch train
 ```
 
 Interactive tasks cannot be detached.
@@ -381,12 +521,6 @@ Interactive tasks cannot be detached.
 
 ```bash
 routurn exec test
-```
-
-Or include a local update archive in the same iteration:
-
-```bash
-routurn exec test ~/Downloads/update.zip
 ```
 
 `exec` performs the main Routurn loop:
@@ -398,20 +532,39 @@ scan local project
 → sync changes over SSH
 → run task with live terminal output
 → collect declared artifacts
-→ save run logs + manifest locally
+→ materialize latest successful task result
+→ save bounded run history
 ```
 
-Local run data is stored under:
+Normal users do not need to copy internal run IDs. Routurn keeps its canonical latest successful artifact set under `.routurn/results/<task>/`, and publishes a short user-facing view in the project root. For a task with one artifact:
 
 ```text
-.routurn/runs/<run-id>/
-├── run.json
-├── stdout.log
-├── stderr.log
-└── artifacts/
+results/<task>/latest.<ext>
 ```
 
-Inspect recent runs:
+For a task with multiple artifacts, the common remote artifact prefix is stripped and the files are exposed directly under `results/<task>/`. The user-facing view is Routurn-managed, replaced atomically after each successful fetch, excluded from Routurn sync/fingerprinting, and locally excluded from Git when possible. If the project already has a user-owned `results/` directory, Routurn does not claim it and uses `routurn-results/` instead.
+
+Show the latest result with:
+
+```bash
+routurn result test
+routurn result test --path
+```
+
+`--path` prints only the stable user-facing file or directory path, which is convenient for scripts and desktop upload dialogs without making Routurn depend on a GUI. Existing results created by older Routurn versions are published into the visible view lazily the first time `routurn result <task>` is run.
+
+Detailed history remains available under `.routurn/runs/<run-id>/` for debugging and audit purposes. By default Routurn automatically keeps the newest 10 local run histories and 10 update backups, plus the newest 20 managed bundles globally. Inspect or override cleanup explicitly with:
+
+```bash
+routurn clean --dry-run
+routurn clean
+routurn clean --keep-runs 20 --keep-updates 20 --keep-bundles 30
+routurn clean --keep-snapshots 20 --keep-remote-runs 20
+```
+
+Normal `clean` also prunes old remote snapshots and completed detached-run state when the configured target is reachable. Use `--local-only` to skip remote cleanup. `--dry-run` never performs remote deletions.
+
+Inspect recent runs when needed:
 
 ```bash
 routurn runs
@@ -436,6 +589,12 @@ Run and collect in one operation:
 
 ```bash
 routurn exec benchmark
+```
+
+The stable latest result is then available through:
+
+```bash
+routurn result benchmark
 ```
 
 Or collect from the current remote project separately:
@@ -494,6 +653,12 @@ Remote machine:
 
 No Routurn binary is installed on the remote machine.
 
+## Remote task environment
+
+Routurn runs remote tasks through non-interactive SSH sessions. Environment variables that are configured only by an interactive shell startup file may therefore be unavailable. If a task requires environment-specific proxy settings, credentials, SDK paths, or runtime configuration, define them in the task command or provide them through the remote environment using the deployment mechanism appropriate for that system.
+
+Do not commit secrets or machine-specific credentials to public `routurn.toml` files. Machine-specific values should remain local/private.
+
 ## Development
 
 ```bash
@@ -507,9 +672,9 @@ go run ./cmd/routurn version
 Near-term work includes:
 
 - structured `--json` output for AI/automation workflows
-- optional validated 7z/RAR import backends
 - stronger end-to-end integration tests over disposable SSH targets
 - richer machine-readable run/event output
+- further terminal UI polish without making Routurn depend on a graphical desktop
 
 ## Releases
 

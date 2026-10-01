@@ -22,6 +22,8 @@ Routurn intentionally:
 - rejects archive symlinks and special files during update application;
 - rejects writes through symlinked local parent directories;
 - snapshots tracked remote files before overwriting or deleting them;
+- identifies managed update bundles by SHA-256 rather than filenames;
+- removes an original selected update archive only after a verified managed copy is safely registered, and never performs broad cleanup of unrelated user files;
 - never installs a daemon or privileged service on the remote machine;
 - does not require `sudo` for normal operation.
 

@@ -30,7 +30,7 @@ func validateRunID(runID string) error {
 	return nil
 }
 
-func StartDetached(target config.Target, remoteRoot, runID, command string) (int, error) {
+func StartDetached(target config.Endpoint, remoteRoot, runID, command string) (int, error) {
 	if err := validateRunID(runID); err != nil {
 		return 0, err
 	}
@@ -94,7 +94,7 @@ printf '%%s\n' "$pid"
 	return pid, nil
 }
 
-func QueryDetached(target config.Target, remoteRoot, runID string) (DetachedStatus, error) {
+func QueryDetached(target config.Endpoint, remoteRoot, runID string) (DetachedStatus, error) {
 	if err := validateRunID(runID); err != nil {
 		return DetachedStatus{}, err
 	}
@@ -165,7 +165,7 @@ func parseDetachedStatus(data []byte) (DetachedStatus, error) {
 	return out, nil
 }
 
-func StreamDetachedLogs(target config.Target, remoteRoot, runID string, lines int, follow bool, stdout, stderr io.Writer) error {
+func StreamDetachedLogs(target config.Endpoint, remoteRoot, runID string, lines int, follow bool, stdout, stderr io.Writer) error {
 	if err := validateRunID(runID); err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ sleep 1
 	return err
 }
 
-func StopDetached(target config.Target, remoteRoot, runID string, force bool) error {
+func StopDetached(target config.Endpoint, remoteRoot, runID string, force bool) error {
 	if err := validateRunID(runID); err != nil {
 		return err
 	}
