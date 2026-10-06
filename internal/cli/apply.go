@@ -61,9 +61,7 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 		if cfgErr != nil {
 			return bundle.Record{}, false, cfgErr
 		}
-		if manifest.Project.Name != "" && manifest.Project.Name != cfg.Name {
-			return bundle.Record{}, false, fmt.Errorf("update belongs to project %q; current project is %q", manifest.Project.Name, cfg.Name)
-		}
+		projectNameDiffers := manifest.Project.Name != "" && manifest.Project.Name != cfg.Name
 
 		payloadPaths := make([]string, 0, len(inspection.Entries))
 		for _, entry := range inspection.Entries {
@@ -81,6 +79,7 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 			}
 		}
 
+		exactMatch := false
 		if manifest.Base.Fingerprint != "" {
 			scan, scanErr := syncer.Scan(root, cfg.Sync.Exclude)
 			if scanErr != nil {
@@ -99,9 +98,17 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 				scan.Files = filtered
 			}
 			current := syncer.Fingerprint(scan)
-			if current != manifest.Base.Fingerprint && !scopedMatch {
+			exactMatch = current == manifest.Base.Fingerprint
+			if !exactMatch && !scopedMatch {
 				return bundle.Record{}, false, fmt.Errorf("update was created for a different project state\nexpected: %s\ncurrent:  %s", manifest.Base.Fingerprint, current)
 			}
+		}
+
+		if projectNameDiffers {
+			if !exactMatch && !scopedMatch {
+				return bundle.Record{}, false, fmt.Errorf("update declares project %q, current project is %q, and no matching base state verifies that it is safe here", manifest.Project.Name, cfg.Name)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "! Bundle project name %q differs from current project %q; verified base state matches, continuing safely\n", manifest.Project.Name, cfg.Name)
 		}
 	}
 	plan, err := bundle.BuildPlan(root, archive, opts.StripComponents)

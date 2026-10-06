@@ -295,7 +295,7 @@ The normal interactive workflow is:
 routurn update
 ```
 
-Routurn presents a terminal menu with recent compatible updates, a terminal file browser, direct path entry, and the latest previously managed update. The file can live anywhere the user can access; Routurn does not require a hard-coded Downloads directory.
+Routurn presents a terminal menu with recently detected Routurn bundles, a terminal file browser, direct path entry, and the latest previously managed update. Safe matches are grouped under `Recommended updates`; bundles with stale state, missing verification, or a different/missing manifest project name remain visible under `Other detected updates` instead of disappearing. State labels include `[compatible]`, `[scoped ok]`, `[state differs]`, and `[unverified]`; identity warnings such as `[project name differs]` are shown separately. Discovery and safety validation are intentionally separate: filenames and human-readable project names help the UI, but they are not trusted as the apply-time safety boundary. Complete target-file preconditions or an exact whole-project fingerprint provide that boundary. The file can live anywhere the user can access; Routurn does not require a hard-coded Downloads directory.
 
 An explicit path is always supported:
 
@@ -309,7 +309,7 @@ For a safe automatic choice:
 routurn update --recent
 ```
 
-Automatic discovery is intentionally conservative. Routurn checks a small set of normal user locations (including the last directory used, current directory, standard user directories, and the system temporary directory), never recursively scans the whole disk, deduplicates candidates by SHA-256, and only auto-classifies a bundle as compatible when its manifest identifies the current project **and** its base fingerprint matches the current project state. If multiple distinct compatible bundles remain, Routurn asks instead of guessing.
+Interactive discovery is intentionally bounded but user-visible. Routurn checks a small set of normal user locations (including the last directory used, current directory, standard user directories, and the system temporary directory), never recursively scans the whole disk, deduplicates candidates by SHA-256, and shows valid Routurn bundles even when the manifest project name is missing or different. Such bundles are never silently promoted to the automatic path. `routurn update --recent` remains conservative: it requires a matching manifest project name plus either an exact whole-project base fingerprint or complete target-file preconditions that match the current local files. If multiple distinct safe candidates remain, Routurn asks instead of guessing.
 
 ### Managed ownership and download cleanup
 
@@ -340,9 +340,13 @@ name = "example-project"
 
 [base]
 fingerprint = "sha256:..."
+
+[base.files]
+"source/example.go" = "sha256:..."
+"scripts/new-helper.sh" = "missing"
 ```
 
-The manifest is metadata and is not written into the project. Routurn rejects a bundle that names a different project. When a base fingerprint is present, Routurn also rejects an update created for a different project state. Legacy archives without a manifest remain available through manual selection/path workflows, but Routurn warns that project/base identity cannot be verified and they are not eligible for automatic `--recent` selection.
+The manifest is metadata and is not written into the project. The project name is a human-readable identity hint, not the sole safety boundary: a bundle that accidentally uses a different project name is still discoverable. Routurn only permits that bundle to continue when an exact whole-project fingerprint or complete matching target-file preconditions independently verify the local base state; otherwise it rejects the update. AI/chat updates can include **complete target-file preconditions** under `[base.files]`: every payload path must have either the SHA-256 of the file state the update was authored against or `missing` for a newly-added file. If unrelated project files changed but all target-file preconditions still match, Routurn can safely apply the bundle without requiring the user to provide a fresh whole-project fingerprint. If any target file changed, Routurn rejects the bundle and reports the conflicting path. Legacy archives without a manifest remain available through manual selection/path workflows, but Routurn warns that project/base identity cannot be verified and they are not eligible for automatic `--recent` selection.
 
 Filenames are not identities. `update.zip` and `update (7).zip` are equivalent when their content hash is identical.
 

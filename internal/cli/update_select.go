@@ -28,12 +28,21 @@ const (
 	updateCompatibilityUnverified
 )
 
+type updateIdentity int
+
+const (
+	updateIdentityUnknown updateIdentity = iota
+	updateIdentityMatch
+	updateIdentityDiffers
+)
+
 type updateChoice struct {
 	Path          string
 	Inspection    bundle.Inspection
 	Hash          string
 	ModTime       time.Time
 	Compatibility updateCompatibility
+	Identity      updateIdentity
 }
 
 func resolveUpdateInput(cmd *cobra.Command, ctx *projectContext, value string, strip int) (string, error) {
@@ -74,14 +83,29 @@ func chooseRecentUpdate(cmd *cobra.Command, ctx *projectContext, strip int) (str
 }
 
 func chooseUpdateInteractive(cmd *cobra.Command, ctx *projectContext, strip int) (string, error) {
-	choices, _ := recentProjectUpdates(ctx, strip)
+	choices, _ := recentDetectedUpdates(ctx, strip)
 	fmt.Fprintf(cmd.OutOrStdout(), "Routurn · %s\n\n", ctx.Resolved.Config.Name)
 	fmt.Fprintln(cmd.OutOrStdout(), "Choose update source")
+	choices = orderUpdateChoices(choices)
 	idx := 1
+	recommendedHeading := false
+	otherHeading := false
 	for _, choice := range choices {
+		if isAutomaticRecentCandidate(choice) {
+			if !recommendedHeading {
+				fmt.Fprintln(cmd.OutOrStdout(), "  Recommended updates")
+				recommendedHeading = true
+			}
+		} else if !otherHeading {
+			fmt.Fprintln(cmd.OutOrStdout(), "  Other detected updates")
+			otherHeading = true
+		}
 		name := displayBundleName(choice.Inspection, filepath.Base(choice.Path))
-		fmt.Fprintf(cmd.OutOrStdout(), "  %d) Recent: %-24s %-14s %s\n", idx, name, updateCompatibilityLabel(choice.Compatibility), choice.Path)
+		fmt.Fprintf(cmd.OutOrStdout(), "  %d) Recent: %-24s %-27s %s\n", idx, name, updateChoiceLabels(choice), choice.Path)
 		idx++
+	}
+	if len(choices) > 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "  Other sources")
 	}
 	browseIndex := idx
 	fmt.Fprintf(cmd.OutOrStdout(), "  %d) Browse files\n", browseIndex)
@@ -236,20 +260,20 @@ func browseForArchive(cmd *cobra.Command, ctx *projectContext) (string, error) {
 }
 
 func recentCompatibleUpdates(ctx *projectContext, strip int) ([]updateChoice, error) {
-	choices, err := recentProjectUpdates(ctx, strip)
+	choices, err := recentDetectedUpdates(ctx, strip)
 	if err != nil {
 		return nil, err
 	}
 	compatible := choices[:0]
 	for _, choice := range choices {
-		if choice.Compatibility == updateCompatibilityExact || choice.Compatibility == updateCompatibilityScoped {
+		if isAutomaticRecentCandidate(choice) {
 			compatible = append(compatible, choice)
 		}
 	}
 	return compatible, nil
 }
 
-func recentProjectUpdates(ctx *projectContext, strip int) ([]updateChoice, error) {
+func recentDetectedUpdates(ctx *projectContext, strip int) ([]updateChoice, error) {
 	dirs := candidateUpdateDirs(ctx.Global)
 	type candidate struct {
 		path string
@@ -298,9 +322,7 @@ func recentProjectUpdates(ctx *projectContext, strip int) ([]updateChoice, error
 			continue
 		}
 		manifest := inspection.Manifest
-		if manifest.Project.Name == "" || manifest.Project.Name != ctx.Resolved.Config.Name {
-			continue
-		}
+		identity := classifyUpdateIdentity(manifest, ctx.Resolved.Config.Name)
 		fingerprint, fpErr := currentProjectFingerprint(ctx, candidate.path)
 		if fpErr != nil {
 			continue
@@ -318,7 +340,7 @@ func recentProjectUpdates(ctx *projectContext, strip int) ([]updateChoice, error
 			}
 			scopedMatch = match
 		}
-		compatibility := classifyUpdateCompatibility(manifest, ctx.Resolved.Config.Name, fingerprint, scopedPresent, scopedMatch)
+		compatibility := classifyUpdateCompatibility(manifest, fingerprint, scopedPresent, scopedMatch)
 		hash, err := intake.HashFile(candidate.path)
 		if err != nil {
 			continue
@@ -333,13 +355,14 @@ func recentProjectUpdates(ctx *projectContext, strip int) ([]updateChoice, error
 			Hash:          hash,
 			ModTime:       candidate.mod,
 			Compatibility: compatibility,
+			Identity:      identity,
 		})
 	}
 	return out, nil
 }
 
-func classifyUpdateCompatibility(manifest *bundle.Manifest, project, fingerprint string, scopedPresent, scopedMatch bool) updateCompatibility {
-	if manifest == nil || manifest.Project.Name == "" || manifest.Project.Name != project {
+func classifyUpdateCompatibility(manifest *bundle.Manifest, fingerprint string, scopedPresent, scopedMatch bool) updateCompatibility {
+	if manifest == nil {
 		return updateCompatibilityUnknown
 	}
 	if scopedPresent && !scopedMatch {
@@ -357,6 +380,36 @@ func classifyUpdateCompatibility(manifest *bundle.Manifest, project, fingerprint
 	return updateCompatibilityStateDiffers
 }
 
+func classifyUpdateIdentity(manifest *bundle.Manifest, project string) updateIdentity {
+	if manifest == nil || strings.TrimSpace(manifest.Project.Name) == "" {
+		return updateIdentityUnknown
+	}
+	if manifest.Project.Name == project {
+		return updateIdentityMatch
+	}
+	return updateIdentityDiffers
+}
+
+func isAutomaticRecentCandidate(choice updateChoice) bool {
+	if choice.Identity != updateIdentityMatch {
+		return false
+	}
+	return choice.Compatibility == updateCompatibilityExact || choice.Compatibility == updateCompatibilityScoped
+}
+
+func orderUpdateChoices(choices []updateChoice) []updateChoice {
+	ordered := append([]updateChoice(nil), choices...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		left := isAutomaticRecentCandidate(ordered[i])
+		right := isAutomaticRecentCandidate(ordered[j])
+		if left != right {
+			return left
+		}
+		return ordered[i].ModTime.After(ordered[j].ModTime)
+	})
+	return ordered
+}
+
 func updateCompatibilityLabel(compatibility updateCompatibility) string {
 	switch compatibility {
 	case updateCompatibilityExact:
@@ -372,6 +425,25 @@ func updateCompatibilityLabel(compatibility updateCompatibility) string {
 	}
 }
 
+func updateIdentityLabel(identity updateIdentity) string {
+	switch identity {
+	case updateIdentityMatch:
+		return ""
+	case updateIdentityDiffers:
+		return "[project name differs]"
+	default:
+		return "[project name missing]"
+	}
+}
+
+func updateChoiceLabels(choice updateChoice) string {
+	labels := updateCompatibilityLabel(choice.Compatibility)
+	if identity := updateIdentityLabel(choice.Identity); identity != "" {
+		labels += " " + identity
+	}
+	return labels
+}
+
 func validateUpdateCompatibility(ctx *projectContext, archive string, strip int) (*bundle.Manifest, updateCompatibility, error) {
 	inspection, err := bundle.InspectArchive(archive, strip)
 	if err != nil {
@@ -380,9 +452,6 @@ func validateUpdateCompatibility(ctx *projectContext, archive string, strip int)
 	manifest := inspection.Manifest
 	if manifest == nil {
 		return nil, updateCompatibilityUnverified, nil
-	}
-	if manifest.Project.Name != "" && manifest.Project.Name != ctx.Resolved.Config.Name {
-		return nil, updateCompatibilityUnknown, fmt.Errorf("update belongs to project %q; current project is %q", manifest.Project.Name, ctx.Resolved.Config.Name)
 	}
 	fingerprint, err := currentProjectFingerprint(ctx, archive)
 	if err != nil {
@@ -406,9 +475,13 @@ func validateUpdateCompatibility(ctx *projectContext, archive string, strip int)
 		}
 	}
 
-	compatibility := classifyUpdateCompatibility(manifest, ctx.Resolved.Config.Name, fingerprint, scopedPresent, scopedMatch)
+	compatibility := classifyUpdateCompatibility(manifest, fingerprint, scopedPresent, scopedMatch)
 	if compatibility == updateCompatibilityStateDiffers {
 		return nil, compatibility, fmt.Errorf("update was created for a different project state\nexpected: %s\ncurrent:  %s", manifest.Base.Fingerprint, fingerprint)
+	}
+	identity := classifyUpdateIdentity(manifest, ctx.Resolved.Config.Name)
+	if identity == updateIdentityDiffers && compatibility != updateCompatibilityExact && compatibility != updateCompatibilityScoped {
+		return nil, compatibility, fmt.Errorf("update declares project %q, current project is %q, and no matching base state verifies that it is safe here", manifest.Project.Name, ctx.Resolved.Config.Name)
 	}
 	return manifest, compatibility, nil
 }
