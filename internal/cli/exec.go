@@ -80,14 +80,16 @@ func newExecCmd() *cobra.Command {
 						}
 					}
 					opts.StripComponents = effectiveStrip
-					manifest, compatErr := validateUpdateCompatibility(ctx, archive, effectiveStrip)
+					manifest, compatibility, compatErr := validateUpdateCompatibility(ctx, archive, effectiveStrip)
 					if compatErr != nil {
 						return compatErr
 					}
 					if manifest == nil {
 						fmt.Fprintln(cmd.OutOrStdout(), "! Legacy update: no routurn-bundle.toml; project/base identity cannot be verified")
-					} else if manifest.Base.Fingerprint == "" {
-						fmt.Fprintln(cmd.OutOrStdout(), "! Bundle identifies the project but has no base fingerprint; state compatibility cannot be verified")
+					} else if compatibility == updateCompatibilityScoped {
+						fmt.Fprintln(cmd.OutOrStdout(), "✓ Bundle target-file preconditions match; unrelated project changes are allowed")
+					} else if compatibility == updateCompatibilityUnverified {
+						fmt.Fprintln(cmd.OutOrStdout(), "! Bundle identifies the project but has no verifiable base state; review the plan before applying")
 					}
 					rememberArchiveDir(ctx.Global, archive)
 					imported, importErr := intake.Import(archive, intake.Options{Consume: !keepUpdateSource, StripComponents: opts.StripComponents})

@@ -16,7 +16,7 @@ func TestManifestIsNotAppliedAsPayload(t *testing.T) {
 	}
 	zw := zip.NewWriter(f)
 	mf, _ := zw.Create(ManifestPath)
-	_, _ = mf.Write([]byte("schema = 1\n[bundle]\nname = \"demo\"\n[project]\nname = \"example\"\n"))
+	_, _ = mf.Write([]byte("schema = 1\n[bundle]\nname = \"demo\"\n[project]\nname = \"example\"\n[base]\nfingerprint = \"sha256:project\"\n[base.files]\n\"hello.txt\" = \"missing\"\n"))
 	payload, _ := zw.Create("hello.txt")
 	_, _ = payload.Write([]byte("hello\n"))
 	if err := zw.Close(); err != nil {
@@ -32,6 +32,9 @@ func TestManifestIsNotAppliedAsPayload(t *testing.T) {
 	}
 	if manifest == nil || manifest.Bundle.Name != "demo" || manifest.Project.Name != "example" {
 		t.Fatalf("unexpected manifest: %#v", manifest)
+	}
+	if manifest.Base.Fingerprint != "sha256:project" || manifest.Base.Files["hello.txt"] != "missing" {
+		t.Fatalf("unexpected base metadata: %#v", manifest.Base)
 	}
 	inspection, err := InspectArchive(archive, 0)
 	if err != nil {

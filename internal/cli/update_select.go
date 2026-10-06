@@ -18,11 +18,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type updateCompatibility int
+
+const (
+	updateCompatibilityUnknown updateCompatibility = iota
+	updateCompatibilityExact
+	updateCompatibilityScoped
+	updateCompatibilityStateDiffers
+	updateCompatibilityUnverified
+)
+
 type updateChoice struct {
-	Path       string
-	Inspection bundle.Inspection
-	Hash       string
-	ModTime    time.Time
+	Path          string
+	Inspection    bundle.Inspection
+	Hash          string
+	ModTime       time.Time
+	Compatibility updateCompatibility
 }
 
 func resolveUpdateInput(cmd *cobra.Command, ctx *projectContext, value string, strip int) (string, error) {
@@ -63,13 +74,13 @@ func chooseRecentUpdate(cmd *cobra.Command, ctx *projectContext, strip int) (str
 }
 
 func chooseUpdateInteractive(cmd *cobra.Command, ctx *projectContext, strip int) (string, error) {
-	choices, _ := recentCompatibleUpdates(ctx, strip)
+	choices, _ := recentProjectUpdates(ctx, strip)
 	fmt.Fprintf(cmd.OutOrStdout(), "Routurn · %s\n\n", ctx.Resolved.Config.Name)
 	fmt.Fprintln(cmd.OutOrStdout(), "Choose update source")
 	idx := 1
 	for _, choice := range choices {
 		name := displayBundleName(choice.Inspection, filepath.Base(choice.Path))
-		fmt.Fprintf(cmd.OutOrStdout(), "  %d) Recent: %-24s %s\n", idx, name, choice.Path)
+		fmt.Fprintf(cmd.OutOrStdout(), "  %d) Recent: %-24s %-14s %s\n", idx, name, updateCompatibilityLabel(choice.Compatibility), choice.Path)
 		idx++
 	}
 	browseIndex := idx
@@ -225,6 +236,20 @@ func browseForArchive(cmd *cobra.Command, ctx *projectContext) (string, error) {
 }
 
 func recentCompatibleUpdates(ctx *projectContext, strip int) ([]updateChoice, error) {
+	choices, err := recentProjectUpdates(ctx, strip)
+	if err != nil {
+		return nil, err
+	}
+	compatible := choices[:0]
+	for _, choice := range choices {
+		if choice.Compatibility == updateCompatibilityExact || choice.Compatibility == updateCompatibilityScoped {
+			compatible = append(compatible, choice)
+		}
+	}
+	return compatible, nil
+}
+
+func recentProjectUpdates(ctx *projectContext, strip int) ([]updateChoice, error) {
 	dirs := candidateUpdateDirs(ctx.Global)
 	type candidate struct {
 		path string
@@ -272,10 +297,28 @@ func recentCompatibleUpdates(ctx *projectContext, strip int) ([]updateChoice, er
 		if err != nil || inspection.Manifest == nil {
 			continue
 		}
-		fingerprint, fpErr := currentProjectFingerprint(ctx, candidate.path)
-		if fpErr != nil || !manifestCompatible(inspection.Manifest, ctx.Resolved.Config.Name, fingerprint) {
+		manifest := inspection.Manifest
+		if manifest.Project.Name == "" || manifest.Project.Name != ctx.Resolved.Config.Name {
 			continue
 		}
+		fingerprint, fpErr := currentProjectFingerprint(ctx, candidate.path)
+		if fpErr != nil {
+			continue
+		}
+		payloadPaths := make([]string, 0, len(inspection.Entries))
+		for _, entry := range inspection.Entries {
+			payloadPaths = append(payloadPaths, entry.Path)
+		}
+		scopedMatch := false
+		scopedPresent := len(manifest.Base.Files) > 0
+		if scopedPresent {
+			match, _, scopedErr := bundle.CheckBaseFiles(ctx.Resolved.Root, payloadPaths, manifest.Base.Files)
+			if scopedErr != nil {
+				continue
+			}
+			scopedMatch = match
+		}
+		compatibility := classifyUpdateCompatibility(manifest, ctx.Resolved.Config.Name, fingerprint, scopedPresent, scopedMatch)
 		hash, err := intake.HashFile(candidate.path)
 		if err != nil {
 			continue
@@ -284,30 +327,90 @@ func recentCompatibleUpdates(ctx *projectContext, strip int) ([]updateChoice, er
 			continue
 		}
 		seenHash[hash] = struct{}{}
-		out = append(out, updateChoice{Path: candidate.path, Inspection: inspection, Hash: hash, ModTime: candidate.mod})
+		out = append(out, updateChoice{
+			Path:          candidate.path,
+			Inspection:    inspection,
+			Hash:          hash,
+			ModTime:       candidate.mod,
+			Compatibility: compatibility,
+		})
 	}
 	return out, nil
 }
 
-func validateUpdateCompatibility(ctx *projectContext, archive string, strip int) (*bundle.Manifest, error) {
-	manifest, err := bundle.ManifestFromArchive(archive, strip)
-	if err != nil {
-		return nil, err
+func classifyUpdateCompatibility(manifest *bundle.Manifest, project, fingerprint string, scopedPresent, scopedMatch bool) updateCompatibility {
+	if manifest == nil || manifest.Project.Name == "" || manifest.Project.Name != project {
+		return updateCompatibilityUnknown
 	}
+	if scopedPresent && !scopedMatch {
+		return updateCompatibilityStateDiffers
+	}
+	if manifest.Base.Fingerprint != "" && manifest.Base.Fingerprint == fingerprint {
+		return updateCompatibilityExact
+	}
+	if scopedPresent && scopedMatch {
+		return updateCompatibilityScoped
+	}
+	if manifest.Base.Fingerprint == "" {
+		return updateCompatibilityUnverified
+	}
+	return updateCompatibilityStateDiffers
+}
+
+func updateCompatibilityLabel(compatibility updateCompatibility) string {
+	switch compatibility {
+	case updateCompatibilityExact:
+		return "[compatible]"
+	case updateCompatibilityScoped:
+		return "[scoped ok]"
+	case updateCompatibilityStateDiffers:
+		return "[state differs]"
+	case updateCompatibilityUnverified:
+		return "[unverified]"
+	default:
+		return "[unknown]"
+	}
+}
+
+func validateUpdateCompatibility(ctx *projectContext, archive string, strip int) (*bundle.Manifest, updateCompatibility, error) {
+	inspection, err := bundle.InspectArchive(archive, strip)
+	if err != nil {
+		return nil, updateCompatibilityUnknown, err
+	}
+	manifest := inspection.Manifest
 	if manifest == nil {
-		return nil, nil
+		return nil, updateCompatibilityUnverified, nil
+	}
+	if manifest.Project.Name != "" && manifest.Project.Name != ctx.Resolved.Config.Name {
+		return nil, updateCompatibilityUnknown, fmt.Errorf("update belongs to project %q; current project is %q", manifest.Project.Name, ctx.Resolved.Config.Name)
 	}
 	fingerprint, err := currentProjectFingerprint(ctx, archive)
 	if err != nil {
-		return nil, err
+		return nil, updateCompatibilityUnknown, err
 	}
-	if manifest.Project.Name != "" && manifest.Project.Name != ctx.Resolved.Config.Name {
-		return nil, fmt.Errorf("update belongs to project %q; current project is %q", manifest.Project.Name, ctx.Resolved.Config.Name)
+
+	payloadPaths := make([]string, 0, len(inspection.Entries))
+	for _, entry := range inspection.Entries {
+		payloadPaths = append(payloadPaths, entry.Path)
 	}
-	if manifest.Base.Fingerprint != "" && manifest.Base.Fingerprint != fingerprint {
-		return nil, fmt.Errorf("update was created for a different project state\nexpected: %s\ncurrent:  %s", manifest.Base.Fingerprint, fingerprint)
+	scopedPresent := len(manifest.Base.Files) > 0
+	scopedMatch := false
+	var scopedMismatches []string
+	if scopedPresent {
+		scopedMatch, scopedMismatches, err = bundle.CheckBaseFiles(ctx.Resolved.Root, payloadPaths, manifest.Base.Files)
+		if err != nil {
+			return nil, updateCompatibilityUnknown, err
+		}
+		if !scopedMatch {
+			return nil, updateCompatibilityStateDiffers, fmt.Errorf("update target files do not match the bundle base state\n  %s", strings.Join(scopedMismatches, "\n  "))
+		}
 	}
-	return manifest, nil
+
+	compatibility := classifyUpdateCompatibility(manifest, ctx.Resolved.Config.Name, fingerprint, scopedPresent, scopedMatch)
+	if compatibility == updateCompatibilityStateDiffers {
+		return nil, compatibility, fmt.Errorf("update was created for a different project state\nexpected: %s\ncurrent:  %s", manifest.Base.Fingerprint, fingerprint)
+	}
+	return manifest, compatibility, nil
 }
 
 func currentProjectFingerprint(ctx *projectContext, ignorePath string) (string, error) {
@@ -330,16 +433,6 @@ func currentProjectFingerprint(ctx *projectContext, ignorePath string) (string, 
 		}
 	}
 	return syncer.Fingerprint(scan), nil
-}
-
-func manifestCompatible(manifest *bundle.Manifest, project, fingerprint string) bool {
-	if manifest == nil || manifest.Project.Name == "" || manifest.Project.Name != project {
-		return false
-	}
-	// Automatic discovery is deliberately stricter than manual selection.
-	// A base fingerprint is required so Routurn never guesses that an older
-	// project-specific download is safe merely because its filename is recent.
-	return manifest.Base.Fingerprint != "" && manifest.Base.Fingerprint == fingerprint
 }
 
 func candidateUpdateDirs(global *config.GlobalConfig) []string {

@@ -25,7 +25,8 @@ type ManifestProject struct {
 }
 
 type ManifestBase struct {
-	Fingerprint string `toml:"fingerprint,omitempty" json:"fingerprint,omitempty"`
+	Fingerprint string            `toml:"fingerprint,omitempty" json:"fingerprint,omitempty"`
+	Files       map[string]string `toml:"files,omitempty" json:"files,omitempty"`
 }
 
 func ManifestFromArchive(path string, strip int) (*Manifest, error) {

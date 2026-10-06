@@ -51,10 +51,11 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 	if _, err := os.Stat(archive); err != nil {
 		return bundle.Record{}, false, fmt.Errorf("update archive: %w", err)
 	}
-	manifest, err := bundle.ManifestFromArchive(archive, opts.StripComponents)
+	inspection, err := bundle.InspectArchive(archive, opts.StripComponents)
 	if err != nil {
 		return bundle.Record{}, false, err
 	}
+	manifest := inspection.Manifest
 	if manifest != nil {
 		cfg, cfgErr := config.LoadProject(root)
 		if cfgErr != nil {
@@ -63,6 +64,23 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 		if manifest.Project.Name != "" && manifest.Project.Name != cfg.Name {
 			return bundle.Record{}, false, fmt.Errorf("update belongs to project %q; current project is %q", manifest.Project.Name, cfg.Name)
 		}
+
+		payloadPaths := make([]string, 0, len(inspection.Entries))
+		for _, entry := range inspection.Entries {
+			payloadPaths = append(payloadPaths, entry.Path)
+		}
+		scopedMatch := false
+		if len(manifest.Base.Files) > 0 {
+			var mismatches []string
+			scopedMatch, mismatches, err = bundle.CheckBaseFiles(root, payloadPaths, manifest.Base.Files)
+			if err != nil {
+				return bundle.Record{}, false, err
+			}
+			if !scopedMatch {
+				return bundle.Record{}, false, fmt.Errorf("update target files do not match the bundle base state\n  %s", strings.Join(mismatches, "\n  "))
+			}
+		}
+
 		if manifest.Base.Fingerprint != "" {
 			scan, scanErr := syncer.Scan(root, cfg.Sync.Exclude)
 			if scanErr != nil {
@@ -81,7 +99,7 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 				scan.Files = filtered
 			}
 			current := syncer.Fingerprint(scan)
-			if current != manifest.Base.Fingerprint {
+			if current != manifest.Base.Fingerprint && !scopedMatch {
 				return bundle.Record{}, false, fmt.Errorf("update was created for a different project state\nexpected: %s\ncurrent:  %s", manifest.Base.Fingerprint, current)
 			}
 		}

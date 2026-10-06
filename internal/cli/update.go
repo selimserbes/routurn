@@ -45,14 +45,16 @@ func newUpdateCmd() *cobra.Command {
 					effectiveStrip = managed.StripComponents
 				}
 			}
-			manifest, err := validateUpdateCompatibility(ctx, archive, effectiveStrip)
+			manifest, compatibility, err := validateUpdateCompatibility(ctx, archive, effectiveStrip)
 			if err != nil {
 				return err
 			}
 			if manifest == nil {
 				fmt.Fprintln(cmd.OutOrStdout(), "! Legacy update: no routurn-bundle.toml; project/base identity cannot be verified")
-			} else if manifest.Base.Fingerprint == "" {
-				fmt.Fprintln(cmd.OutOrStdout(), "! Bundle identifies the project but has no base fingerprint; state compatibility cannot be verified")
+			} else if compatibility == updateCompatibilityScoped {
+				fmt.Fprintln(cmd.OutOrStdout(), "✓ Bundle target-file preconditions match; unrelated project changes are allowed")
+			} else if compatibility == updateCompatibilityUnverified {
+				fmt.Fprintln(cmd.OutOrStdout(), "! Bundle identifies the project but has no verifiable base state; review the plan before applying")
 			}
 
 			if dryRun {
