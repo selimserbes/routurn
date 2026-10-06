@@ -25,6 +25,15 @@ func LoadProject(root string) (*ProjectConfig, error) {
 	if cfg.Tasks == nil {
 		cfg.Tasks = map[string]Task{}
 	}
+	localTasks, err := LoadLocalTasks(root)
+	if err != nil {
+		return nil, err
+	}
+	for name, task := range localTasks {
+		// Routurn-managed local shortcuts intentionally override a same-named
+		// project task without rewriting the user's routurn.toml.
+		cfg.Tasks[name] = task
+	}
 	return &cfg, nil
 }
 

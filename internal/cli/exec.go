@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/selimserbes/routurn/internal/config"
 	"github.com/selimserbes/routurn/internal/intake"
 	resultstore "github.com/selimserbes/routurn/internal/result"
 	"github.com/selimserbes/routurn/internal/retention"
@@ -20,27 +21,64 @@ func newExecCmd() *cobra.Command {
 	var detach bool
 	var updateSpec string
 	var keepUpdateSource bool
+	var saveName string
 
 	cmd := &cobra.Command{
-		Use:   "exec <task> [legacy-update-archive]",
-		Short: "Optionally apply an update, sync changes, run a remote task, and fetch artifacts",
-		Args:  cobra.RangeArgs(1, 2),
+		Use:   "exec [task] [legacy-update-archive] | exec -- <command>",
+		Short: "Discover or run a command remotely, with optional update/sync/artifact workflow",
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := resolveProjectContext()
 			if err != nil {
 				return err
 			}
-			taskName := args[0]
+
+			dash := cmd.ArgsLenAtDash()
+			taskName := ""
+			adhoc := false
+			if dash >= 0 {
+				if dash != 0 || len(args) == 0 {
+					return fmt.Errorf("usage: routurn exec -- <command>")
+				}
+				command := shellJoin(args[dash:])
+				taskName = commandLabel(command)
+				ctx.Resolved.Config.Tasks[taskName] = config.Task{Command: command}
+				adhoc = true
+			} else if len(args) == 0 {
+				choice, chooseErr := chooseRunnableInteractive(cmd, ctx)
+				if chooseErr != nil {
+					return chooseErr
+				}
+				taskName = choice.Name
+				if !choice.Saved {
+					ctx.Resolved.Config.Tasks[taskName] = config.Task{Command: choice.Command}
+					adhoc = true
+				}
+			} else {
+				if len(args) > 2 {
+					return fmt.Errorf("expected a task name and optional legacy update archive; use '--' before an arbitrary command")
+				}
+				taskName = args[0]
+			}
+
 			task, ok := ctx.Resolved.Config.Tasks[taskName]
 			if !ok {
-				return fmt.Errorf("task %q is not defined in routurn.toml", taskName)
+				return fmt.Errorf("task %q is not defined; run 'routurn exec' to discover commands or use 'routurn exec -- <command>'", taskName)
+			}
+			if adhoc && saveName != "" {
+				if err := config.SaveLocalTask(ctx.Resolved.Root, saveName, task); err != nil {
+					return err
+				}
+				taskName = saveName
+				ctx.Resolved.Config.Tasks[taskName] = task
+				fmt.Fprintf(cmd.OutOrStdout(), "✓ Saved command as task %q\n", taskName)
 			}
 			if detach && task.Interactive {
 				return fmt.Errorf("task %q is interactive and cannot be detached", taskName)
 			}
 			effectiveUpdateSpec := updateSpec
 			legacyArchive := ""
-			if len(args) == 2 {
+			if dash < 0 && len(args) == 2 {
 				if updateSpec == "select" {
 					// pflag optional-value flags do not consume the following token.
 					// Treat it as the --update value so both "--update recent" and
@@ -195,9 +233,15 @@ func newExecCmd() *cobra.Command {
 				fmt.Fprintln(cmd.OutOrStdout(), "\n────────────────────────────────────────")
 				fmt.Fprintln(cmd.OutOrStdout(), "✓ Detached run started")
 				fmt.Fprintf(cmd.OutOrStdout(), "PID      %d\n", result.Manifest.RemotePID)
-				fmt.Fprintf(cmd.OutOrStdout(), "Watch    routurn logs %s --follow\n", taskName)
-				fmt.Fprintf(cmd.OutOrStdout(), "Status   routurn status %s\n", taskName)
-				fmt.Fprintf(cmd.OutOrStdout(), "Fetch    routurn fetch %s\n", taskName)
+				selector := taskName
+				if adhoc && saveName == "" {
+					selector = result.Manifest.ID
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Watch    routurn logs %s --follow\n", selector)
+				fmt.Fprintf(cmd.OutOrStdout(), "Status   routurn status %s\n", selector)
+				if !adhoc || saveName != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "Fetch    routurn fetch %s\n", selector)
+				}
 				if verbose {
 					fmt.Fprintf(cmd.OutOrStdout(), "Run      %s\n", result.Manifest.ID)
 				}
@@ -272,5 +316,6 @@ func newExecCmd() *cobra.Command {
 		flag.NoOptDefVal = "select"
 	}
 	cmd.Flags().BoolVar(&keepUpdateSource, "keep-update-source", false, "keep the original update archive after verified import")
+	cmd.Flags().StringVar(&saveName, "save", "", "save a discovered or arbitrary command as a local task shortcut")
 	return cmd
 }

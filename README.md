@@ -55,26 +55,35 @@ Register an SSH target locally:
 routurn target add remote-dev --host dev.example.com --user developer
 ```
 
-Edit `routurn.toml` to point at the remote project path and define a task:
+Point the project at the remote target/path once:
 
 ```toml
 [remote]
 target = "remote-dev"
 path = "/home/developer/projects/example-project"
-
-[tasks.test]
-command = "go test ./..."
-artifacts = ["reports/**"]
 ```
 
-Check the setup and run one complete iteration:
+Then let Routurn discover common project commands:
 
 ```bash
-routurn doctor
+routurn exec
+```
+
+Routurn recognizes common Go, Rust, Node/web, Python, Make, Docker Compose, and executable project entrypoints. Nothing is locked to those ecosystems: any command can always be run directly.
+
+```bash
+routurn exec -- go test ./...
+routurn exec --detach -- cargo run --release
+```
+
+Frequently used commands can be remembered without editing `routurn.toml`:
+
+```bash
+routurn task save test -- go test ./...
 routurn exec test
 ```
 
-Routurn syncs changes, streams remote output live, preserves run metadata, and brings declared artifacts back.
+Routurn syncs changes, streams remote output live, preserves run metadata, and brings declared artifacts back for configured tasks.
 
 ## Core loop
 
@@ -99,7 +108,7 @@ local project / AI update
  local developer / AI
 ```
 
-Routurn is language- and framework-independent. A remote task is simply a configured command.
+Routurn is language- and framework-independent. Remote execution is command-first; a task is only a saved command shortcut with optional artifact metadata.
 
 ## Current commands
 
@@ -135,7 +144,12 @@ routurn logs <task|run-id|latest> [--follow]
 routurn stop <task|run-id|latest> [--force]
 routurn fetch [task|run-id|latest]
 routurn result <task>
+routurn task list
+routurn task save <name> -- <command>
+routurn task remove <name>
+routurn exec
 routurn exec <task> [--update [recent|latest|path]] [--detach]
+routurn exec [--detach] -- <command>
 routurn runs
 routurn runs show <run-id|latest> [--json]
 routurn clean [--dry-run]
@@ -283,9 +297,25 @@ routurn target endpoint add remote-dev backup \
 Lower priority numbers are preferred by automatic routing. `routurn target test remote-dev` checks every configured endpoint; `routurn status --check` also reports the endpoint Routurn would select for the current project.
 
 
+## Zero-config command discovery
+
+`routurn exec` does not require a predeclared task. It inspects the local project and offers high-confidence runnable commands from supported ecosystems, plus project entrypoints discovered without assuming a `scripts/` directory. The default picker is intentionally concise: saved tasks stay first, project entrypoints already represented by a saved task are suppressed from the first screen, and maintenance helpers such as `install_*`, `setup_*`, `migrate_*`, `bootstrap_*`, `generate_*`, `register_*`, and `resolve_*` move behind **Show all detected commands**. Nothing is discarded; the second-level view remains available when needed. Initial built-in discovery covers:
+
+- Go (`go.mod`, root/cmd main packages, build/test)
+- Rust (`Cargo.toml`, default/named binaries, build/test)
+- Node/web (`package.json` scripts with npm/pnpm/yarn/bun lockfile hints)
+- Python (`pyproject.toml` entry points, common app/test entrypoints)
+- Make targets
+- Docker Compose
+- executable, shebang-based, and conventional runnable entrypoints anywhere near the project root
+
+Unsupported languages and tools are never blocked. Use `routurn exec -- <command>` for arbitrary commands. Non-executable entrypoints with a shebang, or conventional names such as `run_*`, `train_*`, `test_*`, `smoke_*`, `seed_*`, and `telemetry_*`, can still be offered with an appropriate interpreter. Local shortcuts created with `routurn task save` are stored under `.routurn/tasks.toml`, merged automatically at runtime, and do not require editing or syncing `routurn.toml`.
+
+The design principle is **command first, task second**: discovery is convenience, arbitrary commands are the universal fallback, and saved tasks are optional shortcuts.
+
 ## AI/chat update archives
 
-Routurn can safely consume an update archive received from a chat-based AI or another developer without asking the user to manually extract, rename, or clean up the download. The local project remains the source of truth.
+Routurn can safely consume an update archive received from a chat-based AI or another developer without asking the user to manually extract, rename, or clean up the download. The AI does not need to know Routurn: ordinary supported archives without a `routurn-bundle.toml` are still detected interactively as `[generic archive] [review required]`. They are never eligible for automatic `--recent` selection, and Routurn shows the apply plan/confirmation before changing the project. The local project remains the source of truth.
 
 ### Human-friendly update selection
 

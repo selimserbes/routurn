@@ -55,6 +55,7 @@ func Execute(version string) error {
 		newStopCmd(),
 		newFetchCmd(),
 		newResultCmd(),
+		newTaskCmd(),
 		newExecCmd(),
 		newRunsCmd(),
 		newCleanCmd(),

@@ -8,6 +8,11 @@ The project follows Semantic Versioning.
 
 ### Added
 
+- Command-first remote execution: `routurn exec` discovers runnable project commands, while `routurn exec -- <command>` works for any language/framework without predefined tasks.
+- Initial ecosystem discovery for Go, Rust, Node/web, Python, Make, Docker Compose, and executable text entrypoints without assuming a `scripts/` directory.
+- Cleaner command picker with saved-task/project-entrypoint deduplication, hidden maintenance helpers, shebang/conventional entrypoint discovery, and a `Show all detected commands` fallback.
+- Routurn-managed local task shortcuts with `routurn task save/list/remove` stored under `.routurn/tasks.toml`.
+- Interactive discovery of ordinary AI/developer archives without Routurn metadata, labeled as generic review-required updates rather than hidden.
 - `routurn bundle inspect` for validating and inspecting update archives without modifying a project.
 - Optional `.7z` and `.rar` update support through a validated local 7-Zip-compatible importer (`7zz`, `7z`, or `7za`).
 - `routurn update` with terminal-based update selection, direct path input, permissive recent-bundle discovery, recommended/other grouping, and separate state/identity labels.

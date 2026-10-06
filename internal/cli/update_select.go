@@ -318,29 +318,32 @@ func recentDetectedUpdates(ctx *projectContext, strip int) ([]updateChoice, erro
 	var out []updateChoice
 	for _, candidate := range candidates {
 		inspection, err := bundle.InspectArchive(candidate.path, strip)
-		if err != nil || inspection.Manifest == nil {
+		if err != nil {
 			continue
 		}
 		manifest := inspection.Manifest
 		identity := classifyUpdateIdentity(manifest, ctx.Resolved.Config.Name)
-		fingerprint, fpErr := currentProjectFingerprint(ctx, candidate.path)
-		if fpErr != nil {
-			continue
-		}
-		payloadPaths := make([]string, 0, len(inspection.Entries))
-		for _, entry := range inspection.Entries {
-			payloadPaths = append(payloadPaths, entry.Path)
-		}
-		scopedMatch := false
-		scopedPresent := len(manifest.Base.Files) > 0
-		if scopedPresent {
-			match, _, scopedErr := bundle.CheckBaseFiles(ctx.Resolved.Root, payloadPaths, manifest.Base.Files)
-			if scopedErr != nil {
+		compatibility := updateCompatibilityUnverified
+		if manifest != nil {
+			fingerprint, fpErr := currentProjectFingerprint(ctx, candidate.path)
+			if fpErr != nil {
 				continue
 			}
-			scopedMatch = match
+			payloadPaths := make([]string, 0, len(inspection.Entries))
+			for _, entry := range inspection.Entries {
+				payloadPaths = append(payloadPaths, entry.Path)
+			}
+			scopedMatch := false
+			scopedPresent := len(manifest.Base.Files) > 0
+			if scopedPresent {
+				match, _, scopedErr := bundle.CheckBaseFiles(ctx.Resolved.Root, payloadPaths, manifest.Base.Files)
+				if scopedErr != nil {
+					continue
+				}
+				scopedMatch = match
+			}
+			compatibility = classifyUpdateCompatibility(manifest, fingerprint, scopedPresent, scopedMatch)
 		}
-		compatibility := classifyUpdateCompatibility(manifest, fingerprint, scopedPresent, scopedMatch)
 		hash, err := intake.HashFile(candidate.path)
 		if err != nil {
 			continue
@@ -437,6 +440,9 @@ func updateIdentityLabel(identity updateIdentity) string {
 }
 
 func updateChoiceLabels(choice updateChoice) string {
+	if choice.Inspection.Manifest == nil {
+		return "[generic archive] [review required]"
+	}
 	labels := updateCompatibilityLabel(choice.Compatibility)
 	if identity := updateIdentityLabel(choice.Identity); identity != "" {
 		labels += " " + identity

@@ -132,8 +132,15 @@ func TestAutomaticRecentRequiresMatchingIdentityAndVerifiedState(t *testing.T) {
 }
 
 func TestUpdateChoiceLabelsIncludeIdentityMismatch(t *testing.T) {
-	choice := updateChoice{Identity: updateIdentityDiffers, Compatibility: updateCompatibilityScoped}
+	choice := updateChoice{Inspection: bundle.Inspection{Manifest: &bundle.Manifest{}}, Identity: updateIdentityDiffers, Compatibility: updateCompatibilityScoped}
 	if got, want := updateChoiceLabels(choice), "[scoped ok] [project name differs]"; got != want {
+		t.Fatalf("updateChoiceLabels() = %q, want %q", got, want)
+	}
+}
+
+func TestGenericArchiveLabel(t *testing.T) {
+	choice := updateChoice{Compatibility: updateCompatibilityUnverified, Identity: updateIdentityUnknown}
+	if got, want := updateChoiceLabels(choice), "[generic archive] [review required]"; got != want {
 		t.Fatalf("updateChoiceLabels() = %q, want %q", got, want)
 	}
 }

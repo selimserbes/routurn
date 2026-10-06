@@ -51,10 +51,8 @@ exclude = [
   "target/**",
 ]
 
-# Example task:
-# [tasks.test]
-# command = "go test ./..."
-# artifacts = []
+# Tasks are optional. Run routurn exec to discover common project commands,
+# or routurn exec -- <command> to run any command remotely.
 `, name)
 			if err := os.WriteFile(path, []byte(template), 0o644); err != nil {
 				return err
@@ -71,7 +69,7 @@ exclude = [
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Initialized Routurn project %q\n", name)
 			fmt.Fprintf(cmd.OutOrStdout(), "Config: %s\n", path)
-			fmt.Fprintln(cmd.OutOrStdout(), "Next: configure [remote] and at least one [tasks.<name>] entry.")
+			fmt.Fprintln(cmd.OutOrStdout(), "Next: configure [remote], then run 'routurn exec' to discover project commands.")
 			return nil
 		},
 	}
