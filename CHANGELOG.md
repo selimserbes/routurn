@@ -6,8 +6,11 @@ The project follows Semantic Versioning.
 
 ## [Unreleased]
 
+
+## [0.2.0] - 2026-10-08
 ### Added
 
+- Native macOS and Windows CI smoke coverage for local-client test/build validation.
 - Command-first remote execution: `routurn exec` discovers runnable project commands, while `routurn exec -- <command>` works for any language/framework without predefined tasks.
 - Initial ecosystem discovery for Go, Rust, Node/web, Python, Make, Docker Compose, and executable text entrypoints without assuming a `scripts/` directory.
 - Cleaner command picker with saved-task/project-entrypoint deduplication, hidden maintenance helpers, shebang/conventional entrypoint discovery, and a `Show all detected commands` fallback.
@@ -52,5 +55,6 @@ The project follows Semantic Versioning.
 - Shell completion generation for bash, zsh, fish, and PowerShell.
 - CI and tag-driven cross-platform GitHub release automation.
 
-[Unreleased]: https://github.com/selimserbes/routurn/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/selimserbes/routurn/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/selimserbes/routurn/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/selimserbes/routurn/releases/tag/v0.1.0

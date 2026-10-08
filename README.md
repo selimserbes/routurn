@@ -40,6 +40,14 @@ curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/main/install.sh
 
 Release binaries are built for Linux, macOS, and Windows on amd64 and arm64.
 
+### Platform scope
+
+Routurn runs as a local client on Linux, macOS, and Windows. Native CI exercises the Go client on all three operating systems.
+
+Remote execution currently targets Unix-like hosts reachable over SSH. Remote hosts are expected to provide standard tools such as `sh`, `tar`, and `find`.
+
+Native Windows remote targets are not part of the current support contract.
+
 ## Quick start
 
 Create or enter a local project, then initialize Routurn:

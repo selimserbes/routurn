@@ -49,3 +49,35 @@ jobs:
           grep -q "## What's Changed" /tmp/routurn-release-notes.md
           grep -q "Agentless SSH target management" /tmp/routurn-release-notes.md
           grep -q "## Installation" /tmp/routurn-release-notes.md
+
+
+  platform-smoke:
+    name: Native client smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build CLI
+        run: go build ./cmd/routurn
+
+      - name: Version smoke
+        run: go run ./cmd/routurn -V
