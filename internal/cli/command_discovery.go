@@ -497,9 +497,14 @@ func looksLikeNamedEntrypoint(path string) bool {
 
 func commandForProjectEntrypoint(root, rel string, executable bool) string {
 	quoted := shellQuote(rel)
-	if executable {
-		return "./" + quoted
+
+	// Prefer the file's declared interpreter. This keeps discovery stable
+	// across Linux, macOS, and Windows local clients even when executable
+	// permission bits are unavailable or represented differently locally.
+	if interpreter := shebangInterpreter(filepath.Join(root, filepath.FromSlash(rel))); interpreter != "" {
+		return interpreter + " " + quoted
 	}
+
 	ext := strings.ToLower(filepath.Ext(rel))
 	switch ext {
 	case ".sh", ".bash":
@@ -515,8 +520,9 @@ func commandForProjectEntrypoint(root, rel string, executable bool) string {
 	case ".pl":
 		return "perl " + quoted
 	}
-	if interpreter := shebangInterpreter(filepath.Join(root, filepath.FromSlash(rel))); interpreter != "" {
-		return interpreter + " " + quoted
+
+	if executable {
+		return "./" + quoted
 	}
 	return "./" + quoted
 }
@@ -529,6 +535,10 @@ func shebangInterpreter(path string) string {
 	defer f.Close()
 	reader := bufio.NewReader(f)
 	line, _ := reader.ReadString('\n')
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "#!") {
+		return ""
+	}
 	line = strings.TrimSpace(strings.TrimPrefix(line, "#!"))
 	if line == "" {
 		return ""

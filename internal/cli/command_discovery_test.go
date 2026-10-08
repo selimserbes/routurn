@@ -113,7 +113,7 @@ func TestDiscoverExecutableCommandsWithoutScriptsConvention(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := commandsBySource(discoverRunnableCommands(root, nil), "Project commands")
-	if got["train_model"] != "./tools/train_model.sh" {
+	if got["train_model"] != "bash tools/train_model.sh" {
 		t.Fatalf("unexpected executable commands: %#v", got)
 	}
 }

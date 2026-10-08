@@ -9,6 +9,8 @@ The project follows Semantic Versioning.
 
 ## [0.2.0] - 2026-10-08
 ### Added
+- Project entrypoint discovery now produces stable interpreter-based commands across Linux, macOS, and Windows local clients instead of depending on local executable permission bits.
+- Native platform smoke and release builds use Go 1.26.8 for current macOS compatibility while the module retains Go 1.22 as its minimum language version.
 
 - Native macOS and Windows CI smoke coverage for local-client test/build validation.
 - Command-first remote execution: `routurn exec` discovers runnable project commands, while `routurn exec -- <command>` works for any language/framework without predefined tasks.
