@@ -6,6 +6,10 @@ The project follows Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed
+- Refresh installation, platform-support, command-inventory, security-policy, and release-process documentation after v0.2.0.
+- Release notes now pin both the installer source and installed Routurn version to the release tag.
+- CI release-notes smoke coverage now exercises the v0.2.0 notes instead of the historical v0.1.0 section.
 
 ## [0.2.0] - 2026-10-08
 ### Added

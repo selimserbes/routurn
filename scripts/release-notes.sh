@@ -77,12 +77,12 @@ $section
 ## Installation
 
 \`\`\`sh
-curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/${tag}/install.sh | ROUTURN_VERSION=${tag} sh
 \`\`\`
 
 ## Release binaries
 
-Prebuilt archives are published for Linux, macOS, and Windows on amd64 and arm64. Verify downloaded archives with \`checksums.txt\`.
+Prebuilt archives are published for Linux, macOS, and Windows on amd64 and arm64. Verify downloaded archives with \`checksums.txt\`. On Windows, download the matching ZIP asset, extract \`routurn.exe\`, and place it on \`PATH\`.
 
 ## Remote model
 

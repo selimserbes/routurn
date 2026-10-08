@@ -4,7 +4,7 @@ Routurn is designed to move project changes to SSH-accessible machines and execu
 
 ## Supported versions
 
-Before the first stable release, security fixes are applied to the latest release only.
+Until Routurn reaches 1.0.0, security fixes are applied to the latest published 0.x minor line only. Older 0.x minor lines are not supported once a newer minor release is available.
 
 ## Reporting a vulnerability
 
@@ -19,12 +19,15 @@ Routurn is local-only and agentless on remote targets. It relies on the user's e
 Routurn intentionally:
 
 - rejects archive path traversal and protected `.git/` / `.routurn/` writes;
-- rejects archive symlinks and special files during update application;
+- rejects Windows drive/ADS/reserved-name paths and trailing-dot/space aliases before update writes;
+- rejects archive symlinks, special files, encrypted external-archive entries, duplicate normalized paths, and configured size-limit violations;
 - rejects writes through symlinked local parent directories;
+- requires exact or scoped base-state verification before automatic `--recent` update selection;
 - snapshots tracked remote files before overwriting or deleting them;
 - identifies managed update bundles by SHA-256 rather than filenames;
 - removes an original selected update archive only after a verified managed copy is safely registered, and never performs broad cleanup of unrelated user files;
+- restricts automatic SSH failover to endpoints explicitly grouped under the same logical target;
 - never installs a daemon or privileged service on the remote machine;
 - does not require `sudo` for normal operation.
 
-Routurn does **not** sandbox the commands configured in `routurn.toml`. A task runs with the permissions of the configured SSH user. Review project configuration and update bundles before running code from untrusted sources.
+Routurn does **not** sandbox commands it executes. Configured tasks, local saved shortcuts, discovered project commands, and arbitrary `routurn exec -- <command>` invocations run with the permissions of the configured SSH user. Review project configuration, selected commands, and update bundles before running code from untrusted sources.

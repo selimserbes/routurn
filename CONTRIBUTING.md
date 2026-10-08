@@ -54,11 +54,11 @@ Routurn uses Semantic Versioning. Release notes are generated from `CHANGELOG.md
 
 Before creating a release tag:
 
-1. Move the relevant entries from `[Unreleased]` into a versioned section such as `## [0.2.0] - 2026-10-15`.
+1. Move the relevant entries from `[Unreleased]` into a versioned section such as `## [0.3.0] - YYYY-MM-DD`.
 2. Run the normal quality gate.
-3. Preview the release body with `sh scripts/release-notes.sh v0.2.0`.
+3. Preview the release body with `sh scripts/release-notes.sh v0.3.0`.
 4. Commit and push the changelog update and wait for CI to pass.
-5. Create an annotated tag such as `git tag -a v0.2.0 -m "Routurn v0.2.0"` and push it.
+5. Create an annotated tag such as `git tag -a v0.3.0 -m "Routurn v0.3.0"` and push it.
 
 The tag-driven release workflow validates the tag and changelog, rebuilds and tests Routurn, creates cross-platform archives, verifies the embedded version, generates SHA-256 checksums, and publishes the GitHub Release using the changelog-derived notes.
 

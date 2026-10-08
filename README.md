@@ -24,7 +24,7 @@ go install github.com/selimserbes/routurn/cmd/routurn@latest
 
 ### Release installer
 
-Starting with `v0.1.0`, Linux and macOS users can install the matching release binary with:
+Linux and macOS users can install the latest release binary with:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/main/install.sh | sh
@@ -35,10 +35,14 @@ The installer verifies the release archive against the published SHA-256 checksu
 Install a specific release with:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/main/install.sh | ROUTURN_VERSION=v0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/v0.2.0/install.sh | ROUTURN_VERSION=v0.2.0 sh
 ```
 
 Release binaries are built for Linux, macOS, and Windows on amd64 and arm64.
+
+### Windows install
+
+The shell installer above is for Linux and macOS. On Windows, download the matching `routurn_windows_amd64.zip` or `routurn_windows_arm64.zip` asset from the [latest GitHub release](https://github.com/selimserbes/routurn/releases/latest), verify it against `checksums.txt`, extract `routurn.exe`, and place it in a directory on `PATH`.
 
 ### Platform scope
 
@@ -116,7 +120,7 @@ local project / AI update
  local developer / AI
 ```
 
-Routurn is language- and framework-independent. Remote execution is command-first; a task is only a saved command shortcut with optional artifact metadata.
+Routurn is language- and framework-independent. Remote execution is command-first. Saved local tasks are lightweight command shortcuts, while configured tasks can additionally declare artifact and interactive-run metadata.
 
 ## Current commands
 
@@ -161,6 +165,8 @@ routurn exec [--detach] -- <command>
 routurn runs
 routurn runs show <run-id|latest> [--json]
 routurn clean [--dry-run]
+routurn completion <bash|zsh|fish|powershell>
+routurn completion install <bash|zsh|fish|powershell>
 
 routurn version
 routurn --version
@@ -658,7 +664,7 @@ Examples include:
 - Robotics / simulation: ROS, Isaac Sim, Isaac Lab, Jetson workflows
 - GUI applications launched on a remote workstation
 
-Routurn does not need to understand the programming language. It only needs a project, an SSH target, and the commands you define.
+Routurn does not need to understand the programming language. It only needs a project, an SSH target, and a command that is discovered, selected, saved, or supplied directly.
 
 
 ## Shell completion

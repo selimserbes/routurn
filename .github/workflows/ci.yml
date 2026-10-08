@@ -45,9 +45,9 @@ jobs:
 
       - name: Release notes smoke test
         run: |
-          sh scripts/release-notes.sh v0.1.0 >/tmp/routurn-release-notes.md
+          sh scripts/release-notes.sh v0.2.0 >/tmp/routurn-release-notes.md
           grep -q "## What's Changed" /tmp/routurn-release-notes.md
-          grep -q "Agentless SSH target management" /tmp/routurn-release-notes.md
+          grep -q "Command-first remote execution" /tmp/routurn-release-notes.md
           grep -q "## Installation" /tmp/routurn-release-notes.md
 
 
