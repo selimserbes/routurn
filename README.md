@@ -35,7 +35,7 @@ The installer verifies the release archive against the published SHA-256 checksu
 Install a specific release with:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/v0.2.0/install.sh | ROUTURN_VERSION=v0.2.0 sh
+curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/v0.3.0/install.sh | ROUTURN_VERSION=v0.3.0 sh
 ```
 
 Release binaries are built for Linux, macOS, and Windows on amd64 and arm64.
@@ -82,6 +82,10 @@ routurn exec
 ```
 
 Routurn recognizes common Go, Rust, Node/web, Python, Make, Docker Compose, and executable project entrypoints. Nothing is locked to those ecosystems: any command can always be run directly.
+
+The v0.3.0 task chooser supports arrow keys, numbered selection (including `0` for the tenth entry), `/` search, and `Enter` to confirm. Shortcuts switch views immediately; selecting a task or update does not execute it merely because it was highlighted. `Esc` cancels an editor or goes back. Recent commands can appear first based on actual run history; the picker never assumes that a name such as `stage3` means "latest". Projects may optionally define their own picker groups.
+
+In terminals without interactive keyboard support (and in scripted/CI usage), continue to use the explicit CLI forms shown below. The terminal interface is convenience, not a required protocol.
 
 ```bash
 routurn exec -- go test ./...
@@ -155,7 +159,7 @@ routurn run <task> [--detach]
 routurn logs <task|run-id|latest> [--follow]
 routurn stop <task|run-id|latest> [--force]
 routurn fetch [task|run-id|latest]
-routurn result <task>
+routurn result [task]
 routurn task list
 routurn task save <name> -- <command>
 routurn task remove <name>
@@ -313,7 +317,7 @@ Lower priority numbers are preferred by automatic routing. `routurn target test 
 
 ## Zero-config command discovery
 
-`routurn exec` does not require a predeclared task. It inspects the local project and offers high-confidence runnable commands from supported ecosystems, plus project entrypoints discovered without assuming a `scripts/` directory. The default picker is intentionally concise: saved tasks stay first, project entrypoints already represented by a saved task are suppressed from the first screen, and maintenance helpers such as `install_*`, `setup_*`, `migrate_*`, `bootstrap_*`, `generate_*`, `register_*`, and `resolve_*` move behind **Show all detected commands**. Nothing is discarded; the second-level view remains available when needed. Initial built-in discovery covers:
+`routurn exec` does not require a predeclared task. It inspects the local project and offers high-confidence runnable commands from supported ecosystems, plus project entrypoints discovered without assuming a `scripts/` directory. The v0.3.0 picker supports searching, paging, recent-run prioritization, and an **All tasks** view to reach discovered maintenance commands such as `install_*`, `setup_*`, `migrate_*`, `bootstrap_*`, `generate_*`, `register_*`, and `resolve_*`. Saved tasks and discovered entrypoints are deduplicated when they represent the same command. Any task grouping is optional project configuration: no framework-specific or `stage` naming convention is required. Initial built-in discovery covers:
 
 - Go (`go.mod`, root/cmd main packages, build/test)
 - Rust (`Cargo.toml`, default/named binaries, build/test)
@@ -326,6 +330,37 @@ Lower priority numbers are preferred by automatic routing. `routurn target test 
 Unsupported languages and tools are never blocked. Use `routurn exec -- <command>` for arbitrary commands. Non-executable entrypoints with a shebang, or conventional names such as `run_*`, `train_*`, `test_*`, `smoke_*`, `seed_*`, and `telemetry_*`, can still be offered with an appropriate interpreter. Local shortcuts created with `routurn task save` are stored under `.routurn/tasks.toml`, merged automatically at runtime, and do not require editing or syncing `routurn.toml`.
 
 The design principle is **command first, task second**: discovery is convenience, arbitrary commands are the universal fallback, and saved tasks are optional shortcuts.
+
+### Interactive selection (v0.3.0)
+
+The same keyboard conventions are used for `exec`, `update`, and `result` when an interactive terminal is available:
+
+| Input | Behavior |
+| --- | --- |
+| `↑` / `↓` | Move the highlighted selection |
+| `←` / `→` | Switch pages when paging is available |
+| `1`–`9`, `0` | Highlight the matching item on the current page (`0` = tenth item) |
+| `Enter` | Confirm the highlighted selection or submit an entered command/path |
+| `/` | Open live search |
+| `Esc` | Cancel the active editor or return to the previous view |
+| `q` | Exit the selector when in the task/list view |
+
+In the task chooser, `e` opens a custom-command editor without hiding the task list. `Esc` returns to the same selection without executing a command. In the update chooser, a selected archive still goes through the existing review and apply-confirmation checks; the picker does not bypass update safety. `routurn result` with no task argument selects from previously materialized results, while `routurn result <task> --path` remains suitable for scripting. No interactive menu is required when an explicit task or command is supplied.
+
+The terminal picker is available where terminal keyboard handling is supported; otherwise Routurn keeps non-interactive/line-based CLI paths. For debugging startup costs, run `ROUTURN_STARTUP_TIMING=1 routurn exec` and exit the menu; it prints local discovery/history timings. Automatic SSH route checking is deferred until after choosing a task, so simply opening the menu need not connect to a remote target.
+
+Optional grouping is project-owned rather than guessed from names. For example, a project with tasks named `build` and `test` can add this to `routurn.toml`:
+
+```toml
+[picker]
+default_group = "Daily"
+
+[[picker.groups]]
+name = "Daily"
+tasks = ["build", "test"]
+```
+
+This configuration is not required for task discovery or search; projects without it get the general task list. Groups do not change how tasks are run or how updates are applied.
 
 ## AI/chat update archives
 
@@ -592,9 +627,10 @@ results/<task>/latest.<ext>
 
 For a task with multiple artifacts, the common remote artifact prefix is stripped and the files are exposed directly under `results/<task>/`. The user-facing view is Routurn-managed, replaced atomically after each successful fetch, excluded from Routurn sync/fingerprinting, and locally excluded from Git when possible. If the project already has a user-owned `results/` directory, Routurn does not claim it and uses `routurn-results/` instead.
 
-Show the latest result with:
+Show a result interactively, or use a named task directly:
 
 ```bash
+routurn result
 routurn result test
 routurn result test --path
 ```
@@ -722,7 +758,7 @@ Near-term work includes:
 - structured `--json` output for AI/automation workflows
 - stronger end-to-end integration tests over disposable SSH targets
 - richer machine-readable run/event output
-- further terminal UI polish without making Routurn depend on a graphical desktop
+- optional local execution targets and multi-hop SSH connectivity (future work; not part of v0.3.0)
 
 ## Releases
 

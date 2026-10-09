@@ -41,18 +41,27 @@ func resolveProjectContext() (*projectContext, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := resolveRemoteForContext(ctx); err != nil {
+		return nil, err
+	}
+	return ctx, nil
+}
+
+// resolveRemoteForContext is deferred until AFTER interactive task selection.
+// Cancelling the local task picker must not trigger SSH auto-route probes.
+func resolveRemoteForContext(ctx *projectContext) error {
 	if ctx.Resolved.Config.Remote.Target == "" || ctx.Resolved.Config.Remote.Path == "" {
-		return nil, fmt.Errorf("project remote target/path is not configured in %s", config.ProjectFileName)
+		return fmt.Errorf("project remote target/path is not configured in %s", config.ProjectFileName)
 	}
 	resolvedEndpoint, err := remote.ResolveEndpoint(ctx.Global, ctx.Resolved.Config.Remote.Target, endpointOverride)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	ctx.TargetName = resolvedEndpoint.TargetName
 	ctx.EndpointName = resolvedEndpoint.EndpointName
 	ctx.Endpoint = resolvedEndpoint.Endpoint
 	ctx.Route = resolvedEndpoint.Route
-	return ctx, nil
+	return nil
 }
 
 type syncResult struct {

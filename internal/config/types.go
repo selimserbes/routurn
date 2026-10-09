@@ -46,6 +46,7 @@ type ProjectConfig struct {
 	Remote  ProjectRemote   `toml:"remote"`
 	Sync    SyncConfig      `toml:"sync"`
 	Tasks   map[string]Task `toml:"tasks"`
+	Picker  PickerConfig    `toml:"picker,omitempty"`
 }
 
 type ProjectRemote struct {
@@ -61,4 +62,19 @@ type Task struct {
 	Command     string   `toml:"command"`
 	Interactive bool     `toml:"interactive,omitempty"`
 	Artifacts   []string `toml:"artifacts,omitempty"`
+}
+
+// PickerConfig is optional, display-only project metadata. Task discovery and
+// execution do not depend on picker configuration.
+type PickerConfig struct {
+	DefaultGroup string            `toml:"default_group,omitempty"`
+	Groups       []PickerGroup     `toml:"groups,omitempty"`
+	Labels       map[string]string `toml:"labels,omitempty"`
+}
+
+// PickerGroup uses task names or shell-style glob patterns over discovered tasks.
+// It intentionally carries no technology- or workflow-specific semantics.
+type PickerGroup struct {
+	Name  string   `toml:"name"`
+	Tasks []string `toml:"tasks"`
 }

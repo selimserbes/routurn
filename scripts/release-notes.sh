@@ -3,7 +3,7 @@ set -eu
 
 usage() {
   echo "usage: $0 <version>" >&2
-  echo "example: $0 v0.2.0" >&2
+  echo "example: $0 v0.3.0" >&2
   exit 2
 }
 
@@ -15,7 +15,7 @@ version=${tag#v}
 case "$tag" in
   v[0-9]*.[0-9]*.[0-9]*) ;;
   *)
-    echo "error: version must look like v0.2.0 or v0.2.0-rc.1" >&2
+    echo "error: version must look like v0.3.0 or v0.3.0-rc.1" >&2
     exit 2
     ;;
 esac

@@ -83,6 +83,9 @@ func chooseRecentUpdate(cmd *cobra.Command, ctx *projectContext, strip int) (str
 }
 
 func chooseUpdateInteractive(cmd *cobra.Command, ctx *projectContext, strip int) (string, error) {
+	if pickerIsInteractiveTerminal(cmd) {
+		return chooseUpdateTTY(cmd, ctx, strip)
+	}
 	choices, _ := recentDetectedUpdates(ctx, strip)
 	fmt.Fprintf(cmd.OutOrStdout(), "Routurn · %s\n\n", ctx.Resolved.Config.Name)
 	fmt.Fprintln(cmd.OutOrStdout(), "Choose update source")

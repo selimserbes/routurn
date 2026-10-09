@@ -28,12 +28,20 @@ func newExecCmd() *cobra.Command {
 		Short: "Discover or run a command remotely, with optional update/sync/artifact workflow",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := resolveProjectContext()
+			// Selecting a task is entirely local. Resolve the SSH route only after
+			// a task is chosen, not while the user is browsing the menu.
+			dash := cmd.ArgsLenAtDash()
+			interactiveChoice := dash < 0 && len(args) == 0
+			var ctx *projectContext
+			var err error
+			if interactiveChoice {
+				ctx, err = resolveLocalProjectContext()
+			} else {
+				ctx, err = resolveProjectContext()
+			}
 			if err != nil {
 				return err
 			}
-
-			dash := cmd.ArgsLenAtDash()
 			taskName := ""
 			adhoc := false
 			if dash >= 0 {
@@ -59,6 +67,16 @@ func newExecCmd() *cobra.Command {
 					return fmt.Errorf("expected a task name and optional legacy update archive; use '--' before an arbitrary command")
 				}
 				taskName = args[0]
+			}
+
+			if interactiveChoice {
+				var routeErr error
+				withPickerLoading(cmd.OutOrStdout(), pickerIsInteractiveTerminal(cmd), "Selecting remote endpoint...", func() {
+					routeErr = resolveRemoteForContext(ctx)
+				})
+				if routeErr != nil {
+					return routeErr
+				}
 			}
 
 			task, ok := ctx.Resolved.Config.Tasks[taskName]

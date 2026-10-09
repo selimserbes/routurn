@@ -10,17 +10,28 @@ import (
 func newResultCmd() *cobra.Command {
 	var pathOnly bool
 	cmd := &cobra.Command{
-		Use:   "result <task>",
+		Use:   "result [task]",
 		Short: "Show the latest successful materialized result for a task",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := resolveLocalProjectContext()
 			if err != nil {
 				return err
 			}
-			meta, publicPath, err := resultstore.Read(ctx.Resolved.Root, args[0])
+			taskName := ""
+			if len(args) > 0 {
+				taskName = args[0]
+			} else if pickerIsInteractiveTerminal(cmd) {
+				taskName, err = chooseResultTTY(cmd, ctx.Resolved.Root, ctx.Resolved.Config.Name)
+				if err != nil {
+					return err
+				}
+			} else {
+				return fmt.Errorf("result requires a task name in noninteractive mode: routurn result <task>")
+			}
+			meta, publicPath, err := resultstore.Read(ctx.Resolved.Root, taskName)
 			if err != nil {
-				return fmt.Errorf("no materialized result for task %q; run 'routurn exec %s' first", args[0], args[0])
+				return fmt.Errorf("no materialized result for task %q; run 'routurn exec %s' first", taskName, taskName)
 			}
 			if pathOnly {
 				fmt.Fprintln(cmd.OutOrStdout(), publicPath)
@@ -34,7 +45,7 @@ func newResultCmd() *cobra.Command {
 			}
 			if verbose {
 				fmt.Fprintf(cmd.OutOrStdout(), "Run     %s\n", meta.RunID)
-				fmt.Fprintf(cmd.OutOrStdout(), "Store   %s\n", resultstore.Dir(ctx.Resolved.Root, args[0]))
+				fmt.Fprintf(cmd.OutOrStdout(), "Store   %s\n", resultstore.Dir(ctx.Resolved.Root, taskName))
 			}
 			return nil
 		},

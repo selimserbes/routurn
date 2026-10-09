@@ -6,10 +6,22 @@ The project follows Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-09
+
+### Added
+- Unified interactive terminal selection for discovered/saved tasks (`routurn exec`), update archives (`routurn update`), and available artifact results (`routurn result` without a task name).
+- Arrow-key navigation, live `/` search, numeric task highlighting (`0` selects item 10), explicit Enter confirmation, Esc cancellation, and an in-place custom-command or path editor.
+- Optional project-defined picker groups and recent-task ordering from run history; no special `stage` naming convention is required.
+- Delayed loading feedback and opt-in startup timing diagnostics with `ROUTURN_STARTUP_TIMING=1`.
+
 ### Changed
-- Refresh installation, platform-support, command-inventory, security-policy, and release-process documentation after v0.2.0.
-- Release notes now pin both the installer source and installed Routurn version to the release tag.
-- CI release-notes smoke coverage now exercises the v0.2.0 notes instead of the historical v0.1.0 section.
+- Remote endpoint probing for interactive `exec` happens after task selection, so opening and exiting the task picker need not wait for SSH routing.
+- Interactive selection is optional: named tasks, direct `routurn exec -- <command>`, explicit update paths, and named result lookups remain available to scripts and advanced users.
+- Refreshed installation and command documentation for v0.3.0 while preserving prior version history.
+
+### Fixed
+- Terminal redraw alignment while handling raw keyboard input, and robust handling of F1–F12/Insert and other unassigned escape sequences.
+- Custom-command/path entry cancellation returns to the same task/update list without accidentally submitting input; clearer persistent selection feedback and readable no-color output.
 
 ## [0.2.0] - 2026-10-08
 ### Added
@@ -61,6 +73,7 @@ The project follows Semantic Versioning.
 - Shell completion generation for bash, zsh, fish, and PowerShell.
 - CI and tag-driven cross-platform GitHub release automation.
 
-[Unreleased]: https://github.com/selimserbes/routurn/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/selimserbes/routurn/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/selimserbes/routurn/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/selimserbes/routurn/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/selimserbes/routurn/releases/tag/v0.1.0
