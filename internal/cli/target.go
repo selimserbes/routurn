@@ -28,7 +28,7 @@ func newTargetCmd() *cobra.Command {
 }
 
 func newTargetAddCmd() *cobra.Command {
-	var host, user string
+	var host, user, jump string
 	var port int
 	cmd := &cobra.Command{
 		Use:   "add <name>",
@@ -38,6 +38,9 @@ func newTargetAddCmd() *cobra.Command {
 			if host == "" {
 				return fmt.Errorf("--host is required")
 			}
+			if err := config.ValidateJump(jump); err != nil {
+				return err
+			}
 			cfg, err := config.LoadGlobal()
 			if err != nil {
 				return err
@@ -45,7 +48,13 @@ func newTargetAddCmd() *cobra.Command {
 			if existing, ok := cfg.Targets[args[0]]; ok && len(existing.Endpoints) > 0 {
 				return fmt.Errorf("target %q already has named endpoints; use 'routurn target endpoint add %s <endpoint> ...' instead", args[0], args[0])
 			}
-			cfg.Targets[args[0]] = config.Target{Host: host, User: user, Port: port}
+			// Updating an existing record without --jump preserves its jump route.
+			if !cmd.Flags().Changed("jump") {
+				if current, ok := cfg.Targets[args[0]]; ok {
+					jump = current.Jump
+				}
+			}
+			cfg.Targets[args[0]] = config.Target{Host: host, User: user, Port: port, Jump: jump}
 			if err := config.SaveGlobal(cfg); err != nil {
 				return err
 			}
@@ -56,6 +65,7 @@ func newTargetAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&host, "host", "", "SSH host or ~/.ssh/config alias")
 	cmd.Flags().StringVar(&user, "user", "", "SSH user (optional when defined by SSH config)")
 	cmd.Flags().IntVar(&port, "port", 22, "SSH port")
+	cmd.Flags().StringVar(&jump, "jump", "", "SSH ProxyJump chain, e.g. user@bastion:2222,second-bastion")
 	return cmd
 }
 
@@ -82,7 +92,7 @@ func newTargetListCmd() *cobra.Command {
 				target := cfg.Targets[name]
 				endpoints := config.EndpointList(target)
 				if len(endpoints) == 1 && len(target.Endpoints) == 0 {
-					fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-32s port=%d\n", name, remote.Destination(endpoints[0].Endpoint), endpoints[0].Endpoint.Port)
+					fmt.Fprintf(cmd.OutOrStdout(), "%-16s %-32s port=%d%s\n", name, remote.Destination(endpoints[0].Endpoint), endpoints[0].Endpoint.Port, jumpLabel(endpoints[0].Endpoint.Jump))
 					continue
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "%s  route=%s  endpoints=%d\n", name, config.EffectiveRoute(target), len(endpoints))
@@ -91,7 +101,7 @@ func newTargetListCmd() *cobra.Command {
 					if config.EffectiveRoute(target) == endpoint.Name {
 						marker = "*"
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "  %s %-12s %-32s port=%d priority=%d\n", marker, endpoint.Name, remote.Destination(endpoint.Endpoint), endpoint.Endpoint.Port, displayPriority(endpoint.Endpoint.Priority))
+					fmt.Fprintf(cmd.OutOrStdout(), "  %s %-12s %-32s port=%d priority=%d%s\n", marker, endpoint.Name, remote.Destination(endpoint.Endpoint), endpoint.Endpoint.Port, displayPriority(endpoint.Endpoint.Priority), jumpLabel(endpoint.Endpoint.Jump))
 				}
 			}
 			return nil
@@ -132,7 +142,7 @@ func newTargetEndpointCmd() *cobra.Command {
 }
 
 func newTargetEndpointAddCmd() *cobra.Command {
-	var host, user, primaryName string
+	var host, user, primaryName, jump string
 	var port, priority int
 	cmd := &cobra.Command{
 		Use:   "add <target> <endpoint>",
@@ -141,6 +151,9 @@ func newTargetEndpointAddCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if host == "" {
 				return fmt.Errorf("--host is required")
+			}
+			if err := config.ValidateJump(jump); err != nil {
+				return err
 			}
 			if err := validateEndpointName(args[1]); err != nil {
 				return err
@@ -162,7 +175,12 @@ func newTargetEndpointAddCmd() *cobra.Command {
 			if target.Endpoints == nil {
 				target.Endpoints = map[string]config.Endpoint{}
 			}
-			target.Endpoints[args[1]] = config.NormalizeEndpoint(config.Endpoint{Host: host, User: user, Port: port, Priority: priority})
+			if !cmd.Flags().Changed("jump") {
+				if current, ok := target.Endpoints[args[1]]; ok {
+					jump = current.Jump
+				}
+			}
+			target.Endpoints[args[1]] = config.NormalizeEndpoint(config.Endpoint{Host: host, User: user, Port: port, Priority: priority, Jump: jump})
 			if target.Route == "" {
 				target.Route = "auto"
 			}
@@ -179,6 +197,7 @@ func newTargetEndpointAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&user, "user", "", "SSH user")
 	cmd.Flags().IntVar(&port, "port", 22, "SSH port")
 	cmd.Flags().IntVar(&priority, "priority", 100, "auto-route priority; lower values are preferred")
+	cmd.Flags().StringVar(&jump, "jump", "", "SSH ProxyJump chain, e.g. user@bastion:2222,second-bastion")
 	cmd.Flags().StringVar(&primaryName, "primary-name", "primary", "name to give an existing single route when converting the target")
 	return cmd
 }
@@ -199,7 +218,7 @@ func newTargetEndpointListCmd() *cobra.Command {
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Target %s\nRoute  %s\n", args[0], config.EffectiveRoute(target))
 			for _, endpoint := range config.EndpointList(target) {
-				fmt.Fprintf(cmd.OutOrStdout(), "%-12s %-32s port=%d priority=%d\n", endpoint.Name, remote.Destination(endpoint.Endpoint), endpoint.Endpoint.Port, displayPriority(endpoint.Endpoint.Priority))
+				fmt.Fprintf(cmd.OutOrStdout(), "%-12s %-32s port=%d priority=%d%s\n", endpoint.Name, remote.Destination(endpoint.Endpoint), endpoint.Endpoint.Port, displayPriority(endpoint.Endpoint.Priority), jumpLabel(endpoint.Endpoint.Jump))
 			}
 			return nil
 		},
@@ -471,6 +490,13 @@ func projectsUsingTarget(cfg *config.GlobalConfig, targetName string) []string {
 	}
 	sort.Strings(projects)
 	return projects
+}
+
+func jumpLabel(jump string) string {
+	if jump == "" {
+		return ""
+	}
+	return " jump=" + jump
 }
 
 func displayPriority(priority int) int {

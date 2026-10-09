@@ -6,6 +6,22 @@ The project follows Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-09
+
+### Added
+- Explicit SSH-free project execution via `[execution].mode = "local"` and `routurn init --local`, with local task output, run history, and artifact/result collection.
+- OpenSSH `--jump` support for single or chained bastion routes, shared consistently across remote commands, synchronization, and artifact transfer; separate SSH multiplex pools for direct and jumped routes.
+- Interactive registered-project selection for bare `exec`, `update`, and `result` outside project directories, without silently changing persistent defaults.
+- Explicit project selection by directory path (`-p ./path`, absolute paths, or `~/path`) and `routurn project check` for offline configuration checks.
+- Registration conflict protection requiring explicit `project add --replace` before reassigning an existing project name.
+
+### Changed
+- A missing `[execution].mode` continues to use remote SSH execution for compatibility with v0.3.0.
+- Local `sync` is a no-op; `--detach` remains available for remote tasks but is not supported for local-mode tasks.
+
+### Fixed
+- Local artifact glob collection ignores Routurn-owned published result directories, preventing collection of prior results into new results; user-owned `results/` directories remain eligible.
+
 ## [0.3.0] - 2026-10-09
 
 ### Added
@@ -73,7 +89,8 @@ The project follows Semantic Versioning.
 - Shell completion generation for bash, zsh, fish, and PowerShell.
 - CI and tag-driven cross-platform GitHub release automation.
 
-[Unreleased]: https://github.com/selimserbes/routurn/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/selimserbes/routurn/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/selimserbes/routurn/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/selimserbes/routurn/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/selimserbes/routurn/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/selimserbes/routurn/releases/tag/v0.1.0

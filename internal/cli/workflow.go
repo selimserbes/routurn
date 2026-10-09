@@ -9,6 +9,7 @@ import (
 
 	"github.com/selimserbes/routurn/internal/artifact"
 	"github.com/selimserbes/routurn/internal/config"
+	"github.com/selimserbes/routurn/internal/localexec"
 	"github.com/selimserbes/routurn/internal/project"
 	"github.com/selimserbes/routurn/internal/remote"
 	"github.com/selimserbes/routurn/internal/runstate"
@@ -50,6 +51,14 @@ func resolveProjectContext() (*projectContext, error) {
 // resolveRemoteForContext is deferred until AFTER interactive task selection.
 // Cancelling the local task picker must not trigger SSH auto-route probes.
 func resolveRemoteForContext(ctx *projectContext) error {
+	if ctx.Resolved.Config.IsLocal() {
+		if endpointOverride != "" {
+			return fmt.Errorf("--endpoint is not applicable to local projects")
+		}
+		ctx.TargetName = "local"
+		ctx.Route = "local"
+		return nil
+	}
 	if ctx.Resolved.Config.Remote.Target == "" || ctx.Resolved.Config.Remote.Path == "" {
 		return fmt.Errorf("project remote target/path is not configured in %s", config.ProjectFileName)
 	}
@@ -71,6 +80,10 @@ type syncResult struct {
 }
 
 func performSync(ctx *projectContext, out io.Writer, dryRun bool, snapshotID string) (syncResult, error) {
+	if ctx.Resolved.Config.IsLocal() {
+		fmt.Fprintln(out, "✓ Local project; SSH sync is not required")
+		return syncResult{}, nil
+	}
 	scan, err := syncer.Scan(ctx.Resolved.Root, ctx.Resolved.Config.Sync.Exclude)
 	if err != nil {
 		return syncResult{}, fmt.Errorf("scan local project: %w", err)
@@ -159,7 +172,7 @@ func runTask(ctx *projectContext, taskName string, manifest runstate.Manifest, s
 		manifest = runstate.Manifest{
 			ID:         runstate.NewID(),
 			Project:    ctx.Resolved.Config.Name,
-			Target:     ctx.Resolved.Config.Remote.Target,
+			Target:     ctx.TargetName,
 			Endpoint:   ctx.EndpointName,
 			Task:       taskName,
 			Status:     "RUNNING",
@@ -193,15 +206,16 @@ func runTask(ctx *projectContext, taskName string, manifest runstate.Manifest, s
 		fmt.Fprintf(stdout, "Run      %s\n", manifest.ID)
 	}
 	fmt.Fprintln(stdout, "────────────────────────────────────────")
-	exitCode, runErr := remote.RunWithIO(
-		ctx.Endpoint,
-		ctx.Resolved.Config.Remote.Path,
-		task.Command,
-		task.Interactive,
-		stdin,
-		io.MultiWriter(stdout, stdoutLog),
-		io.MultiWriter(stderr, stderrLog),
-	)
+	var exitCode int
+	var runErr error
+	if ctx.Resolved.Config.IsLocal() {
+		exitCode, runErr = localexec.Run(ctx.Resolved.Root, task.Command, stdin, io.MultiWriter(stdout, stdoutLog), io.MultiWriter(stderr, stderrLog))
+	} else {
+		exitCode, runErr = remote.RunWithIO(
+			ctx.Endpoint, ctx.Resolved.Config.Remote.Path, task.Command, task.Interactive,
+			stdin, io.MultiWriter(stdout, stdoutLog), io.MultiWriter(stderr, stderrLog),
+		)
+	}
 	fmt.Fprintln(stdout, "────────────────────────────────────────")
 
 	manifest.FinishedAt = time.Now().UTC().Format(time.RFC3339)
@@ -216,6 +230,9 @@ func runTask(ctx *projectContext, taskName string, manifest runstate.Manifest, s
 }
 
 func runTaskDetached(ctx *projectContext, taskName string, manifest runstate.Manifest) taskRunResult {
+	if ctx.Resolved.Config.IsLocal() {
+		return taskRunResult{Err: fmt.Errorf("local --detach is not supported yet; run without --detach")}
+	}
 	task, ok := ctx.Resolved.Config.Tasks[taskName]
 	if !ok {
 		return taskRunResult{Err: fmt.Errorf("task %q is not defined in %s", taskName, config.ProjectFileName)}
@@ -228,7 +245,7 @@ func runTaskDetached(ctx *projectContext, taskName string, manifest runstate.Man
 		manifest = runstate.Manifest{
 			ID:         runstate.NewID(),
 			Project:    ctx.Resolved.Config.Name,
-			Target:     ctx.Resolved.Config.Remote.Target,
+			Target:     ctx.TargetName,
 			Endpoint:   ctx.EndpointName,
 			Task:       taskName,
 			Status:     "RUNNING",
@@ -275,6 +292,9 @@ func fetchTaskArtifacts(ctx *projectContext, taskName, dest string) ([]string, e
 	if len(task.Artifacts) == 0 {
 		return nil, nil
 	}
+	if ctx.Resolved.Config.IsLocal() {
+		return localexec.Collect(ctx.Resolved.Root, task.Artifacts, dest)
+	}
 	return artifact.Fetch(ctx.Endpoint, ctx.Resolved.Config.Remote.Path, task.Artifacts, dest)
 }
 
@@ -291,9 +311,16 @@ func relativePaths(root string, paths []string) []string {
 }
 
 func printResolvedTarget(out io.Writer, ctx *projectContext) {
+	if ctx.Resolved.Config.IsLocal() {
+		fmt.Fprintf(out, "Target   local\nPath     %s\n", ctx.Resolved.Root)
+		return
+	}
 	fmt.Fprintf(out, "Target   %s\n", ctx.TargetName)
 	fmt.Fprintf(out, "Route    %s\n", ctx.Route)
 	fmt.Fprintf(out, "Endpoint %s (%s)\n", ctx.EndpointName, remote.Destination(ctx.Endpoint))
+	if ctx.Endpoint.Jump != "" {
+		fmt.Fprintf(out, "Jump     %s\n", ctx.Endpoint.Jump)
+	}
 }
 
 func stdinForTask() io.Reader {

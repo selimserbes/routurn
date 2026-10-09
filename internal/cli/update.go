@@ -20,7 +20,13 @@ func newUpdateCmd() *cobra.Command {
 		Short: "Select, safely import, and apply an update bundle",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := resolveLocalProjectContext()
+			var ctx *projectContext
+			var err error
+			if len(args) == 0 && !recent {
+				ctx, err = resolveLocalProjectContextForPicker(cmd)
+			} else {
+				ctx, err = resolveLocalProjectContext()
+			}
 			if err != nil {
 				return err
 			}

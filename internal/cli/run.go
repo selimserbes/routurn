@@ -13,7 +13,7 @@ func newRunCmd() *cobra.Command {
 	var detach bool
 	cmd := &cobra.Command{
 		Use:   "run <task>",
-		Short: "Run a configured task on the remote target",
+		Short: "Run a configured task in the selected local or remote environment",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := resolveProjectContext()
@@ -32,6 +32,9 @@ func newRunCmd() *cobra.Command {
 			printResolvedTarget(cmd.OutOrStdout(), ctx)
 			fmt.Fprintf(cmd.OutOrStdout(), "Task     %s\n", taskName)
 
+			if detach && ctx.Resolved.Config.IsLocal() {
+				return fmt.Errorf("local --detach is not supported yet; run without --detach")
+			}
 			if detach {
 				result := runTaskDetached(ctx, taskName, runstate.Manifest{})
 				if result.Err != nil {

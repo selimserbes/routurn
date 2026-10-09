@@ -3,7 +3,7 @@ set -eu
 
 usage() {
   echo "usage: $0 <version>" >&2
-  echo "example: $0 v0.3.0" >&2
+  echo "example: $0 v0.4.0" >&2
   exit 2
 }
 
@@ -15,7 +15,7 @@ version=${tag#v}
 case "$tag" in
   v[0-9]*.[0-9]*.[0-9]*) ;;
   *)
-    echo "error: version must look like v0.3.0 or v0.3.0-rc.1" >&2
+    echo "error: version must look like v0.4.0 or v0.4.0-rc.1" >&2
     exit 2
     ;;
 esac
@@ -68,8 +68,20 @@ if command -v git >/dev/null 2>&1 && git -C "$repo_root" rev-parse --git-dir >/d
     | awk -v current="$tag" '$0 != current { print; exit }')
 fi
 
+if [ "$tag" = "v0.4.0" ]; then
+  description="Routurn is an agentless project iteration CLI for local or SSH-based task execution, updates, and results."
+  model="## Execution model
+
+Routurn runs locally. A project may execute on the local machine without SSH, or on Unix-like remote machines over standard SSH (including ProxyJump routes). Remote machines need no Routurn installation."
+else
+  description="Routurn is an agentless remote iteration CLI for syncing changes, running tasks over SSH, and collecting results."
+  model="## Remote model
+
+Routurn runs on the local machine and operates over standard SSH. The remote host does not need a Routurn daemon, service, or binary."
+fi
+
 cat <<EOF_NOTES
-Routurn is an agentless remote iteration CLI for syncing changes, running tasks over SSH, and collecting results.
+$description
 
 ## What's Changed
 $section
@@ -84,9 +96,7 @@ curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/${tag}/install.
 
 Prebuilt archives are published for Linux, macOS, and Windows on amd64 and arm64. Verify downloaded archives with \`checksums.txt\`. On Windows, download the matching ZIP asset, extract \`routurn.exe\`, and place it on \`PATH\`.
 
-## Remote model
-
-Routurn runs on the local machine and operates over standard SSH. The remote host does not need a Routurn daemon, service, or binary.
+$model
 EOF_NOTES
 
 if [ -n "$previous" ]; then

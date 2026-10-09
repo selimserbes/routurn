@@ -2,6 +2,8 @@ package remote
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -69,12 +71,17 @@ func sshArgs(target config.Endpoint, interactive bool) []string {
 		"-o", "ServerAliveInterval=30",
 		"-o", "ServerAliveCountMax=3",
 	}
-	if controlPath := sshControlPath(); controlPath != "" {
+	if controlPath := sshControlPath(target.Jump); controlPath != "" {
 		args = append(args,
 			"-o", "ControlMaster=auto",
 			"-o", "ControlPersist=120",
 			"-o", "ControlPath="+controlPath,
 		)
+	}
+	if target.Jump != "" {
+		// -J is routed through OpenSSH directly; no ProxyCommand shell and no
+		// SSH agent forwarding through the destination session.
+		args = append(args, "-o", "ForwardAgent=no", "-J", target.Jump)
 	}
 	if target.Port > 0 && target.Port != 22 {
 		args = append(args, "-p", strconv.Itoa(target.Port))
@@ -85,7 +92,7 @@ func sshArgs(target config.Endpoint, interactive bool) []string {
 	return args
 }
 
-func sshControlPath() string {
+func sshControlPath(jump string) string {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil || cacheDir == "" {
 		return ""
@@ -94,8 +101,12 @@ func sshControlPath() string {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ""
 	}
-	// OpenSSH expands %C to a hash of the connection tuple. This gives all
-	// Routurn SSH subprocesses for the same target a stable multiplex socket.
+	// Keep direct and bastion-routed connections in distinct multiplex pools.
+	// A previously established direct socket must never bypass a selected jump.
+	if jump != "" {
+		fingerprint := sha256.Sum256([]byte(jump))
+		return filepath.Join(dir, "j"+hex.EncodeToString(fingerprint[:6])+"-%C")
+	}
 	return filepath.Join(dir, "%C")
 }
 

@@ -31,7 +31,7 @@ func Execute(version string) error {
 			remote.SetVerbose(verbose, cmd.ErrOrStderr())
 		},
 	}
-	root.PersistentFlags().StringVarP(&projectName, "project", "p", "", "registered project name (allows running outside the project directory)")
+	root.PersistentFlags().StringVarP(&projectName, "project", "p", "", "registered project name or project directory (usable outside the project)")
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "show detailed Routurn and SSH diagnostics")
 	root.PersistentFlags().StringVar(&endpointOverride, "endpoint", "", "use a specific target endpoint for this command without changing the saved route")
 	root.Flags().BoolVarP(&showVersion, "version", "V", false, "print Routurn version")

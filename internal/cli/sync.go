@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 
-	"github.com/selimserbes/routurn/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -11,7 +10,7 @@ func newSyncCmd() *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
 		Use:   "sync",
-		Short: "Safely synchronize project changes to the configured remote target",
+		Short: "Safely synchronize remote projects (no-op for local projects)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var ctx *projectContext
@@ -19,11 +18,15 @@ func newSyncCmd() *cobra.Command {
 			if dryRun {
 				ctx, err = resolveLocalProjectContext()
 				if err == nil {
-					if ctx.Resolved.Config.Remote.Target == "" || ctx.Resolved.Config.Remote.Path == "" {
-						return fmt.Errorf("project remote target/path is not configured in %s", config.ProjectFileName)
+					if !ctx.Resolved.Config.IsLocal() {
+						if ctx.Resolved.Config.Remote.Target == "" || ctx.Resolved.Config.Remote.Path == "" {
+							return fmt.Errorf("project remote target/path is not configured in routurn.toml")
+						}
 					}
-					if _, ok := ctx.Global.Targets[ctx.Resolved.Config.Remote.Target]; !ok {
-						return fmt.Errorf("target %q is not registered; use 'routurn target add ...'", ctx.Resolved.Config.Remote.Target)
+					if !ctx.Resolved.Config.IsLocal() {
+						if _, ok := ctx.Global.Targets[ctx.Resolved.Config.Remote.Target]; !ok {
+							return fmt.Errorf("target %q is not registered; use 'routurn target add ...'", ctx.Resolved.Config.Remote.Target)
+						}
 					}
 				}
 			} else {
@@ -33,12 +36,16 @@ func newSyncCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Routurn · %s\n", ctx.Resolved.Config.Name)
-			if dryRun {
+			if ctx.Resolved.Config.IsLocal() {
+				printResolvedTarget(cmd.OutOrStdout(), ctx)
+			} else if dryRun {
 				fmt.Fprintf(cmd.OutOrStdout(), "Target   %s\n", ctx.Resolved.Config.Remote.Target)
 			} else {
 				printResolvedTarget(cmd.OutOrStdout(), ctx)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Remote   %s\n", ctx.Resolved.Config.Remote.Path)
+			if !ctx.Resolved.Config.IsLocal() {
+				fmt.Fprintf(cmd.OutOrStdout(), "Remote   %s\n", ctx.Resolved.Config.Remote.Path)
+			}
 			if dryRun {
 				fmt.Fprintln(cmd.OutOrStdout(), "Mode     dry-run")
 			}

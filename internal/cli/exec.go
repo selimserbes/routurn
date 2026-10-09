@@ -25,7 +25,7 @@ func newExecCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "exec [task] [legacy-update-archive] | exec -- <command>",
-		Short: "Discover or run a command remotely, with optional update/sync/artifact workflow",
+		Short: "Discover or run a command locally or remotely, with optional update/sync/artifact workflow",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Selecting a task is entirely local. Resolve the SSH route only after
@@ -35,7 +35,7 @@ func newExecCmd() *cobra.Command {
 			var ctx *projectContext
 			var err error
 			if interactiveChoice {
-				ctx, err = resolveLocalProjectContext()
+				ctx, err = resolveLocalProjectContextForPicker(cmd)
 			} else {
 				ctx, err = resolveProjectContext()
 			}
@@ -69,7 +69,7 @@ func newExecCmd() *cobra.Command {
 				taskName = args[0]
 			}
 
-			if interactiveChoice {
+			if interactiveChoice && !ctx.Resolved.Config.IsLocal() {
 				var routeErr error
 				withPickerLoading(cmd.OutOrStdout(), pickerIsInteractiveTerminal(cmd), "Selecting remote endpoint...", func() {
 					routeErr = resolveRemoteForContext(ctx)
@@ -90,6 +90,9 @@ func newExecCmd() *cobra.Command {
 				taskName = saveName
 				ctx.Resolved.Config.Tasks[taskName] = task
 				fmt.Fprintf(cmd.OutOrStdout(), "✓ Saved command as task %q\n", taskName)
+			}
+			if detach && ctx.Resolved.Config.IsLocal() {
+				return fmt.Errorf("local --detach is not supported yet; run without --detach")
 			}
 			if detach && task.Interactive {
 				return fmt.Errorf("task %q is interactive and cannot be detached", taskName)
@@ -192,7 +195,7 @@ func newExecCmd() *cobra.Command {
 			manifest := runstate.Manifest{
 				ID:            runID,
 				Project:       ctx.Resolved.Config.Name,
-				Target:        ctx.Resolved.Config.Remote.Target,
+				Target:        ctx.TargetName,
 				Endpoint:      ctx.EndpointName,
 				Task:          taskName,
 				Status:        "SYNCING",

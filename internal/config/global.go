@@ -58,6 +58,16 @@ func LoadGlobal() (*GlobalConfig, error) {
 	if cfg.Projects == nil {
 		cfg.Projects = map[string]ProjectLink{}
 	}
+	for name, target := range cfg.Targets {
+		if err := ValidateJump(target.Jump); err != nil {
+			return nil, fmt.Errorf("target %q: %w", name, err)
+		}
+		for endpointName, endpoint := range target.Endpoints {
+			if err := ValidateJump(endpoint.Jump); err != nil {
+				return nil, fmt.Errorf("target %q endpoint %q: %w", name, endpointName, err)
+			}
+		}
+	}
 	return &cfg, nil
 }
 

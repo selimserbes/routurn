@@ -22,6 +22,11 @@ func LoadProject(root string) (*ProjectConfig, error) {
 	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
+	switch cfg.Execution.Mode {
+	case "", "remote", "local":
+	default:
+		return nil, fmt.Errorf("invalid [execution].mode %q (expected local or remote)", cfg.Execution.Mode)
+	}
 	if cfg.Tasks == nil {
 		cfg.Tasks = map[string]Task{}
 	}

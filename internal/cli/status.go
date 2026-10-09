@@ -34,11 +34,18 @@ func showProjectStatus(cmd *cobra.Command, check bool) error {
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Project      %s\n", resolved.Config.Name)
 	fmt.Fprintf(cmd.OutOrStdout(), "Local root   %s\n", resolved.Root)
-	fmt.Fprintf(cmd.OutOrStdout(), "Target       %s\n", valueOrDash(resolved.Config.Remote.Target))
-	fmt.Fprintf(cmd.OutOrStdout(), "Remote path  %s\n", valueOrDash(resolved.Config.Remote.Path))
+	if resolved.Config.IsLocal() {
+		fmt.Fprintln(cmd.OutOrStdout(), "Target       local")
+		if check {
+			fmt.Fprintln(cmd.OutOrStdout(), "Connectivity local (no SSH needed)")
+		}
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "Target       %s\n", valueOrDash(resolved.Config.Remote.Target))
+		fmt.Fprintf(cmd.OutOrStdout(), "Remote path  %s\n", valueOrDash(resolved.Config.Remote.Path))
+	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Tasks        %d\n", len(resolved.Config.Tasks))
 
-	if resolved.Config.Remote.Target != "" {
+	if !resolved.Config.IsLocal() && resolved.Config.Remote.Target != "" {
 		global, err := config.LoadGlobal()
 		if err != nil {
 			return err
@@ -49,6 +56,9 @@ func showProjectStatus(cmd *cobra.Command, check bool) error {
 			fmt.Fprintf(cmd.OutOrStdout(), "Endpoints    %d\n", len(endpoints))
 			if len(endpoints) == 1 {
 				fmt.Fprintf(cmd.OutOrStdout(), "SSH          %s\n", remote.Destination(endpoints[0].Endpoint))
+				if endpoints[0].Endpoint.Jump != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "Jump         %s\n", endpoints[0].Endpoint.Jump)
+				}
 			}
 			if check {
 				fmt.Fprintln(cmd.OutOrStdout(), "Connectivity")
@@ -70,6 +80,9 @@ func showProjectStatus(cmd *cobra.Command, check bool) error {
 					return selectErr
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "Selected     %s (%s)\n", selected.EndpointName, remote.Destination(selected.Endpoint))
+				if selected.Endpoint.Jump != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "Jump         %s\n", selected.Endpoint.Jump)
+				}
 				if !reachable[selected.EndpointName] {
 					return fmt.Errorf("selected endpoint %q is unreachable", selected.EndpointName)
 				}

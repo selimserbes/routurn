@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/selimserbes/routurn/internal/bundle"
@@ -19,9 +20,15 @@ func newDoctorCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			failed := false
+			resolved, projectErr := project.Resolve(projectName)
+			localMode := projectErr == nil && resolved.Config.IsLocal()
 			if path, err := exec.LookPath("ssh"); err != nil {
-				fmt.Fprintln(cmd.OutOrStdout(), "✗ ssh      missing (required)")
-				failed = true
+				if localMode {
+					fmt.Fprintln(cmd.OutOrStdout(), "! ssh      missing (not needed for local mode)")
+				} else {
+					fmt.Fprintln(cmd.OutOrStdout(), "✗ ssh      missing (required)")
+					failed = true
+				}
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "✓ ssh      %s\n", path)
 			}
@@ -37,15 +44,23 @@ func newDoctorCmd() *cobra.Command {
 				fmt.Fprintln(cmd.OutOrStdout(), "! archive  7zz/7z/7za not found (optional; ZIP/TAR remain native)")
 			}
 
-			resolved, err := project.Resolve(projectName)
-			if err != nil {
-				fmt.Fprintf(cmd.OutOrStdout(), "! project  %v\n", err)
+			if projectErr != nil {
+				fmt.Fprintf(cmd.OutOrStdout(), "! project  %v\n", projectErr)
 				if failed {
 					return fmt.Errorf("doctor found required issues")
 				}
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ project  %s (%s)\n", resolved.Config.Name, resolved.Root)
+			if localMode {
+				fmt.Fprintln(cmd.OutOrStdout(), "✓ mode     local (SSH not required)")
+				if _, err := exec.LookPath("sh"); err != nil {
+					if runtime.GOOS != "windows" {
+						return fmt.Errorf("local shell sh not found: %w", err)
+					}
+				}
+				return nil
+			}
 			if resolved.Config.Remote.Target == "" || resolved.Config.Remote.Path == "" {
 				fmt.Fprintln(cmd.OutOrStdout(), "! remote   target/path not configured in routurn.toml")
 				if failed {

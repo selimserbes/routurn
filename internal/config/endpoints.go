@@ -26,6 +26,7 @@ func EndpointList(target Target) []NamedEndpoint {
 				Host: target.Host,
 				User: target.User,
 				Port: target.Port,
+				Jump: target.Jump,
 			}),
 		}}
 	}
@@ -80,11 +81,12 @@ func PromoteLegacyTarget(target Target, endpointName string) (Target, error) {
 		return Target{}, fmt.Errorf("endpoint name must not be empty or %q", endpointName)
 	}
 	target.Endpoints = map[string]Endpoint{
-		endpointName: NormalizeEndpoint(Endpoint{Host: target.Host, User: target.User, Port: target.Port, Priority: 10}),
+		endpointName: NormalizeEndpoint(Endpoint{Host: target.Host, User: target.User, Port: target.Port, Priority: 10, Jump: target.Jump}),
 	}
 	target.Host = ""
 	target.User = ""
 	target.Port = 0
+	target.Jump = ""
 	if target.Route == LegacyEndpointName {
 		target.Route = endpointName
 	}

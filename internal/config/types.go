@@ -19,6 +19,7 @@ type Target struct {
 	Host      string              `toml:"host,omitempty"`
 	User      string              `toml:"user,omitempty"`
 	Port      int                 `toml:"port,omitempty"`
+	Jump      string              `toml:"jump,omitempty"`
 	Route     string              `toml:"route,omitempty"`
 	Endpoints map[string]Endpoint `toml:"endpoints,omitempty"`
 }
@@ -29,6 +30,7 @@ type Endpoint struct {
 	User     string `toml:"user,omitempty"`
 	Port     int    `toml:"port,omitempty"`
 	Priority int    `toml:"priority,omitempty"`
+	Jump     string `toml:"jump,omitempty"`
 }
 
 type NamedEndpoint struct {
@@ -41,13 +43,22 @@ type ProjectLink struct {
 }
 
 type ProjectConfig struct {
-	Version int             `toml:"version"`
-	Name    string          `toml:"name"`
-	Remote  ProjectRemote   `toml:"remote"`
-	Sync    SyncConfig      `toml:"sync"`
-	Tasks   map[string]Task `toml:"tasks"`
-	Picker  PickerConfig    `toml:"picker,omitempty"`
+	Execution ExecutionConfig `toml:"execution,omitempty"`
+	Version   int             `toml:"version"`
+	Name      string          `toml:"name"`
+	Remote    ProjectRemote   `toml:"remote"`
+	Sync      SyncConfig      `toml:"sync"`
+	Tasks     map[string]Task `toml:"tasks"`
+	Picker    PickerConfig    `toml:"picker,omitempty"`
 }
+
+// ExecutionConfig selects the task execution environment. An omitted mode
+// preserves the v0.3.0 SSH behavior. Local mode must be explicitly enabled.
+type ExecutionConfig struct {
+	Mode string `toml:"mode,omitempty"`
+}
+
+func (p ProjectConfig) IsLocal() bool { return p.Execution.Mode == "local" }
 
 type ProjectRemote struct {
 	Target string `toml:"target"`

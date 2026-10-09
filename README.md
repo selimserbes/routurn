@@ -3,11 +3,79 @@
 [![CI](https://github.com/selimserbes/routurn/actions/workflows/ci.yml/badge.svg)](https://github.com/selimserbes/routurn/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Agentless remote iteration CLI for syncing changes, running tasks over SSH, and collecting results.**
+**Agentless project iteration CLI for running tasks locally or over SSH, applying updates, and collecting results.**
 
-Routurn is for development loops where code is edited locally but the real build, test, simulation, benchmark, training, or runtime environment lives on another machine.
+Routurn supports local builds, tests, and development workflows as well as workflows where code is edited locally but simulation, benchmarking, training, or another runtime lives on a remote machine.
 
-The remote machine does **not** need Routurn, a daemon, or a privileged service. Routurn stays on the user's machine and works over standard SSH using common remote tools (`sh`, `tar`, and `find`).
+Remote machines do **not** need Routurn, a daemon, or a privileged service. Routurn stays on the user's machine and uses standard SSH with common remote tools (`sh`, `tar`, and `find`) when remote execution is configured.
+
+
+
+## v0.4.0: local execution, SSH jump, and project selection
+
+To use Routurn without SSH, run `routurn init --local` in a new project, or add
+the following to an existing `routurn.toml`:
+
+```toml
+[execution]
+mode = "local"
+
+[tasks.smoke]
+command = "echo local-run"
+artifacts = ["outputs/**/*.json"]
+```
+
+`routurn exec`, `routurn run smoke`, `routurn fetch`, `routurn update`, and
+`routurn result` use the existing TUI/history/output conventions. Local exec
+runs from the project root, without SSH or upload. Artifact patterns must be
+project-relative and symlinks are not followed. Generated Routurn result views
+are excluded from local artifact collection, including with broad patterns;
+unrelated user-owned `results/` directories are not excluded. Local detached
+execution (`routurn exec --detach`, `routurn run --detach`) is **not supported**.
+
+Without `[execution] mode = "local"`, existing projects keep the v0.3.0 SSH
+behavior. `mode = "remote"` is also accepted explicitly.
+
+### SSH jump hosts
+
+Use `routurn target add <name> ... --jump bastion` (or a comma-separated
+jump chain). Jump routes are shared by remote command execution, sync, and
+artifact transfer. Existing targets without `--jump` remain direct. A local
+SSH `Host` alias can be used as a jump hop. Offline argument/configuration
+tests cannot prove a bastion is reachable; test actual connectivity separately.
+
+### Choosing and checking projects
+
+A registered name and an explicit directory path are both accepted by the
+project flag; paths may be absolute, `./relative`, `../relative`, or `~/path`.
+When given a nested directory, Routurn finds the nearest `routurn.toml`
+ancestor. A name that matches a registered project takes priority over an
+ambiguous relative path.
+
+```bash
+routurn project add ~/workspace/python/example --name example
+routurn project list
+routurn project show example
+routurn project check example                   # local configuration only; no SSH
+routurn project select                          # interactive; prints a CLI hint
+routurn -p example exec
+routurn -p ~/workspace/python/example exec
+routurn -p ./my-other-project result smoke
+```
+
+When started **interactively outside any Routurn project**, bare `routurn exec`,
+`routurn update`, and `routurn result` ask which registered project to use
+*before* showing their normal TUI. This choice is for the current command
+only: no persistent default is written and selecting a project never runs a
+command or applies an update. In a project (including subdirectories), that
+project remains the default. Explicit actions and noninteractive usage require
+a project directory or `-p`; Routurn never guesses a project for a script.
+
+Missing or invalid project entries are omitted from the interactive picker but
+are still visible with `routurn project list`. Registering a different folder
+with an already-used name is rejected unless you explicitly pass
+`routurn project add ... --name NAME --replace`; `routurn init` also refuses
+to overwrite another project's registry entry.
 
 
 ## Install
@@ -35,7 +103,7 @@ The installer verifies the release archive against the published SHA-256 checksu
 Install a specific release with:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/v0.3.0/install.sh | ROUTURN_VERSION=v0.3.0 sh
+curl -fsSL https://raw.githubusercontent.com/selimserbes/routurn/v0.4.0/install.sh | ROUTURN_VERSION=v0.4.0 sh
 ```
 
 Release binaries are built for Linux, macOS, and Windows on amd64 and arm64.
@@ -142,9 +210,11 @@ routurn target route <target> [auto|endpoint]
 routurn target test [target]
 routurn target remove <name>
 
-routurn project add [path] [--name <name>]
+routurn project add [path] [--name <name>] [--replace]
 routurn project list
 routurn project show <name>
+routurn project select
+routurn project check [name-or-path]
 routurn project remove <name>
 
 routurn status [task|run-id|latest] [--check]
@@ -257,6 +327,36 @@ routurn target add remote-dev \
 ```
 
 `dev.example.com` is documentation-only. In real use, `--host` can be a hostname, IP address, or an alias from `~/.ssh/config`.
+
+### SSH jump hosts / bastion routing (v0.4.0 development)
+
+Routurn uses OpenSSH's `ProxyJump` (`ssh -J`) for one or multiple SSH hops.
+The jump route is stored **per endpoint**, so `sync`, `exec`, `run`, `fetch`,
+`status --check`, and route probing use the same chain throughout a workflow:
+
+```bash
+# Single-route target
+routurn target add gpu --host 10.0.0.42 --user mss --jump dev@bastion.example.com
+
+# Named route on an existing target
+routurn target endpoint add gpu via-bastion \
+  --host 10.0.0.42 --user mss --jump dev@bastion.example.com --priority 20
+
+# Two jumps (OpenSSH reaches each hop in sequence)
+routurn target endpoint add gpu two-hops \
+  --host 10.0.0.42 --user mss --jump gateway1,gateway2:2222 --priority 30
+
+routurn target endpoint list gpu
+routurn target test gpu
+```
+
+An alternate no-Routurn-config approach is to define a `Host` with `ProxyJump`
+in `~/.ssh/config` and use its alias as `--host`. Both approaches use your
+normal SSH keys and host-key verification; no credentials or agent forwarding
+are configured by Routurn. Jump-enabled endpoints explicitly disable agent
+forwarding for the destination connection and get separate multiplex sockets
+from direct connections. To clear a configured jump, update with `--jump ''`.
+**No bastion is required for local projects or existing direct SSH routes.**
 
 ### Multiple routes to the same remote machine
 
@@ -700,7 +800,7 @@ Examples include:
 - Robotics / simulation: ROS, Isaac Sim, Isaac Lab, Jetson workflows
 - GUI applications launched on a remote workstation
 
-Routurn does not need to understand the programming language. It only needs a project, an SSH target, and a command that is discovered, selected, saved, or supplied directly.
+Routurn does not need to understand the programming language. It needs a project and a command that is discovered, selected, saved, or supplied directly; SSH targets are optional for projects configured with `[execution] mode = "local"`.
 
 
 ## Shell completion
@@ -725,9 +825,9 @@ routurn completion install zsh
 Local machine:
 
 - Routurn
-- OpenSSH client (`ssh`)
+- OpenSSH client (`ssh`) for remote mode only
 
-Remote machine:
+Remote machine (remote mode only):
 
 - SSH access
 - `sh`
@@ -758,7 +858,7 @@ Near-term work includes:
 - structured `--json` output for AI/automation workflows
 - stronger end-to-end integration tests over disposable SSH targets
 - richer machine-readable run/event output
-- optional local execution targets and multi-hop SSH connectivity (future work; not part of v0.3.0)
+- finish and harden v0.4.0 local and multi-hop SSH workflows, including real-host integration tests
 
 ## Releases
 
