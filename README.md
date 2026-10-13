@@ -527,6 +527,36 @@ Routurn never deletes unrelated files from Downloads, Desktop, or any other dire
 
 Managed bundles use content-addressed storage under the platform's user data directory. Identical archives are stored once even when the browser gave them different filenames.
 
+### Full-source snapshots and obsolete files
+
+By default, updates **never delete project files** merely because an archive
+omits them. This protects partial patches. For an archive representing a
+**complete source snapshot**, explicitly opt in:
+
+```bash
+routurn update /path/to/full-project.zip --full-snapshot --dry-run
+routurn update /path/to/full-project.zip --full-snapshot --keep-source
+# Also supported: routurn apply ARCHIVE --full-snapshot
+# and routurn exec TASK --update ARCHIVE --full-snapshot
+```
+
+The **first successfully applied full snapshot** records the exact source files
+Routurn manages under `.routurn/full-snapshot.json`; unrelated files already
+on disk are preserved. Each later full snapshot may remove a file absent from
+its archive **only if** it appeared in the previous tracked snapshot and its
+current SHA-256 content still matches the recorded version. Any edited,
+symlinked, or non-regular obsolete file stops the update without deletion.
+Changes and deletions are listed in the plan (`Deleted`), and a rollback
+restores removed files and the previous tracking state.
+
+`--full-snapshot` means the archive includes the *whole intended managed source
+set*. Never use it for small, partial ZIP patches. Ordinary updates without the
+flag retain their existing add/modify-only behavior. Git metadata, Routurn
+state/configuration, common dependency/build environments, and configured
+sync excludes are never automatically deleted. Empty directories left behind by
+removed files are cleaned up only when empty.
+The source ZIP is preserved on a dry-run or a tracking-only update.
+
 ### Bundle identity and compatibility
 
 New Routurn bundles can include a root-level `routurn-bundle.toml`:
@@ -820,7 +850,7 @@ Examples include:
 - Next.js / Node.js: `npm test`
 - C / C++: `cmake`, `ninja`, `ctest`
 - ML / AI: training and evaluation scripts
-- Robotics / simulation: ROS, Isaac Sim, Isaac Lab, Jetson workflows
+- Remote automation: repeatable commands and project scripts
 - GUI applications launched on a remote workstation
 
 Routurn does not need to understand the programming language. It needs a project and a command that is discovered, selected, saved, or supplied directly; SSH targets are optional for projects configured with `[execution] mode = "local"`.

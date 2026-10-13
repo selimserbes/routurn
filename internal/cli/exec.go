@@ -21,6 +21,7 @@ func newExecCmd() *cobra.Command {
 	var detach bool
 	var updateSpec string
 	var keepUpdateSource bool
+	var fullSnapshot bool
 	var saveName string
 
 	cmd := &cobra.Command{
@@ -113,6 +114,9 @@ func newExecCmd() *cobra.Command {
 			}
 
 			hasUpdate := legacyArchive != "" || effectiveUpdateSpec != ""
+			if fullSnapshot && !hasUpdate {
+				return fmt.Errorf("--full-snapshot requires an update archive")
+			}
 			totalSteps := 3
 			if detach {
 				totalSteps = 2
@@ -124,7 +128,7 @@ func newExecCmd() *cobra.Command {
 			if hasUpdate {
 				fmt.Fprintf(cmd.OutOrStdout(), "[1/%d] Apply update\n", totalSteps)
 				archive := ""
-				opts := applyOptions{Yes: yes, StripComponents: stripComponents}
+				opts := applyOptions{Yes: yes, FullSnapshot: fullSnapshot, StripComponents: stripComponents}
 
 				originalArchive := ""
 				importedUpdate := intake.Result{}
@@ -198,7 +202,9 @@ func newExecCmd() *cobra.Command {
 					return nil
 				}
 				if applied && record.ID != "" && originalArchive != "" {
-					finishUpdateSource(cmd, originalArchive, importedUpdate, keepUpdateSource)
+					if len(record.Added)+len(record.Modified)+len(record.Deleted) > 0 {
+						finishUpdateSource(cmd, originalArchive, importedUpdate, keepUpdateSource)
+					}
 				}
 				updateID = record.ID
 				updateArchive = record.Archive
@@ -351,6 +357,7 @@ func newExecCmd() *cobra.Command {
 		flag.NoOptDefVal = "select"
 	}
 	cmd.Flags().BoolVar(&keepUpdateSource, "keep-update-source", false, "keep the original update archive after verified import")
+	cmd.Flags().BoolVar(&fullSnapshot, "full-snapshot", false, "complete source snapshot when using --update; prune previously tracked unchanged files")
 	cmd.Flags().StringVar(&saveName, "save", "", "save a discovered or arbitrary command as a local task shortcut")
 	return cmd
 }
