@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: CLI entrypoint
+        run: test -f cmd/routurn/main.go
+
+      - name: Format check
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build CLI
+        run: go build -o /tmp/routurn ./cmd/routurn
+
+      - name: Shell syntax
+        run: |
+          sh -n install.sh
+          sh -n scripts/release-notes.sh
+
+      - name: Release notes smoke test
+        run: |
+          sh scripts/release-notes.sh v1.0.0 >/tmp/routurn-v1-notes.md
+          grep -Fq "## What's Changed" /tmp/routurn-v1-notes.md
+          grep -Fq "Agentless command execution" /tmp/routurn-v1-notes.md
+          grep -Fq "## Execution model" /tmp/routurn-v1-notes.md
+          grep -Fq "## Installation" /tmp/routurn-v1-notes.md
+
+  platform-smoke:
+    name: Native client smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.8'
+          cache-dependency-path: go.sum
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build CLI
+        run: go build ./cmd/routurn
+
+      - name: Version smoke
+        run: go run ./cmd/routurn -V

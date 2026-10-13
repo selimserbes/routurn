@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.8'
+          cache-dependency-path: go.sum
+
+      - name: Validate release tag
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $VERSION" >&2
+            echo "Expected vMAJOR.MINOR.PATCH or a prerelease such as v1.0.0-rc.1" >&2
+            exit 1
+          fi
+          test -f cmd/routurn/main.go
+          sh scripts/release-notes.sh "$VERSION" >/tmp/release-notes.md
+
+      - name: Quality gate
+        run: |
+          set -euo pipefail
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test ./...
+          go build -o /tmp/routurn ./cmd/routurn
+          sh -n install.sh
+          sh -n scripts/release-notes.sh
+
+      - name: Build release archives
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/work
+
+          build_unix() {
+            os="$1"
+            arch="$2"
+            dir="dist/work/${os}_${arch}"
+            mkdir -p "$dir"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              go build -trimpath \
+                -ldflags "-s -w -X main.version=${VERSION}" \
+                -o "$dir/routurn" ./cmd/routurn
+            tar -C "$dir" -czf "dist/routurn_${os}_${arch}.tar.gz" routurn
+          }
+
+          build_windows() {
+            arch="$1"
+            dir="dist/work/windows_${arch}"
+            mkdir -p "$dir"
+            CGO_ENABLED=0 GOOS=windows GOARCH="$arch" \
+              go build -trimpath \
+                -ldflags "-s -w -X main.version=${VERSION}" \
+                -o "$dir/routurn.exe" ./cmd/routurn
+            (cd "$dir" && zip -q "../../routurn_windows_${arch}.zip" routurn.exe)
+          }
+
+          build_unix linux amd64
+          build_unix linux arm64
+          build_unix darwin amd64
+          build_unix darwin arm64
+          build_windows amd64
+          build_windows arm64
+
+          if [ "$(dist/work/linux_amd64/routurn -V)" != "$VERSION" ]; then
+            echo "built binary version does not match tag" >&2
+            exit 1
+          fi
+
+          cp /tmp/release-notes.md dist/release-notes.md
+          cd dist
+          sha256sum routurn_* > checksums.txt
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          release_kind="--latest"
+          case "$VERSION" in
+            *-*) release_kind="--prerelease" ;;
+          esac
+
+          gh release create "$VERSION" \
+            dist/routurn_* \
+            dist/checksums.txt \
+            --verify-tag \
+            --title "Routurn $VERSION" \
+            --notes-file dist/release-notes.md \
+            "$release_kind"

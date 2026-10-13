@@ -1,0 +1,75 @@
+package cli
+
+import (
+	"fmt"
+
+	"github.com/selimserbes/routurn/internal/remote"
+	"github.com/spf13/cobra"
+)
+
+var (
+	projectName      string
+	verbose          bool
+	showVersion      bool
+	endpointOverride string
+)
+
+func Execute(version string) error {
+	root := &cobra.Command{
+		Use:           "routurn",
+		Short:         "Agentless remote iteration CLI",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if showVersion {
+				fmt.Fprintln(cmd.OutOrStdout(), version)
+				return nil
+			}
+			return cmd.Help()
+		},
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			remote.SetVerbose(verbose, cmd.ErrOrStderr())
+		},
+	}
+	root.PersistentFlags().StringVarP(&projectName, "project", "p", "", "registered project name or project directory (usable outside the project)")
+	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "show detailed Routurn and SSH diagnostics")
+	root.PersistentFlags().StringVar(&endpointOverride, "endpoint", "", "use a specific target endpoint for this command without changing the saved route")
+	root.Flags().BoolVarP(&showVersion, "version", "V", false, "print Routurn version")
+
+	root.AddCommand(
+		newVersionCmd(version),
+		newCompletionCmd(root),
+		newInitCmd(),
+		newDoctorCmd(),
+		newTargetCmd(),
+		newProjectCmd(),
+		newStatusCmd(),
+		newBundleCmd(),
+		newUpdateCmd(),
+		newApplyCmd(),
+		newUpdatesCmd(),
+		newRollbackCmd(),
+		newSyncCmd(),
+		newRunCmd(),
+		newLogsCmd(),
+		newStopCmd(),
+		newFetchCmd(),
+		newResultCmd(),
+		newTaskCmd(),
+		newExecCmd(),
+		newRunsCmd(),
+		newCleanCmd(),
+	)
+	return root.Execute()
+}
+
+func newVersionCmd(version string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print Routurn version",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Fprintln(cmd.OutOrStdout(), version)
+		},
+	}
+}
