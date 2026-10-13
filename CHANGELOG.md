@@ -5,6 +5,12 @@ The project follows Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+- Opt-in `--full-snapshot` for complete update archives: track managed source
+  files, preview obsolete files, safely remove only unchanged previously
+  managed files, and restore removed files with rollback. Partial archives
+  keep the original non-deleting behavior.
+
 ## [1.0.0] - 2026-10-13
 
 ### Features

@@ -19,20 +19,30 @@ type Plan struct {
 	Added     []string `json:"added,omitempty"`
 	Modified  []string `json:"modified,omitempty"`
 	Unchanged []string `json:"unchanged,omitempty"`
+	Deleted   []string `json:"deleted,omitempty"`
 	Entries   []Entry  `json:"-"`
+
+	FullSnapshot    bool              `json:"-"`
+	SnapshotFiles   map[string]string `json:"-"`
+	SnapshotBefore  []byte            `json:"-"`
+	SnapshotExisted bool              `json:"-"`
+	DeleteHashes    map[string]string `json:"-"`
 }
 
 type Record struct {
-	ID         string   `json:"id"`
-	Archive    string   `json:"archive"`
-	AppliedAt  string   `json:"applied_at"`
-	Added      []string `json:"added,omitempty"`
-	Modified   []string `json:"modified,omitempty"`
-	Backup     string   `json:"backup,omitempty"`
-	BundleHash string   `json:"bundle_hash,omitempty"`
-	BundleName string   `json:"bundle_name,omitempty"`
-	RolledBack bool     `json:"rolled_back,omitempty"`
-	RollbackAt string   `json:"rollback_at,omitempty"`
+	ID           string   `json:"id"`
+	Archive      string   `json:"archive"`
+	AppliedAt    string   `json:"applied_at"`
+	Added        []string `json:"added,omitempty"`
+	Modified     []string `json:"modified,omitempty"`
+	Deleted      []string `json:"deleted,omitempty"`
+	FullSnapshot bool     `json:"full_snapshot,omitempty"`
+	HadSnapshot  bool     `json:"had_snapshot,omitempty"`
+	Backup       string   `json:"backup,omitempty"`
+	BundleHash   string   `json:"bundle_hash,omitempty"`
+	BundleName   string   `json:"bundle_name,omitempty"`
+	RolledBack   bool     `json:"rolled_back,omitempty"`
+	RollbackAt   string   `json:"rollback_at,omitempty"`
 }
 
-func nowRFC3339() string { return time.Now().UTC().Format(time.RFC3339) }
+func nowRFC3339() string { return time.Now().UTC().Format(time.RFC3339Nano) }

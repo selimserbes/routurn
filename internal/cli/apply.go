@@ -17,6 +17,7 @@ import (
 
 type applyOptions struct {
 	DryRun          bool
+	FullSnapshot    bool
 	Yes             bool
 	StripComponents int
 	ManagedHash     string
@@ -46,6 +47,7 @@ func newApplyCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "show what the archive would change without applying it")
+	cmd.Flags().BoolVar(&opts.FullSnapshot, "full-snapshot", false, "treat archive as a complete source snapshot; prune only previously tracked unchanged files")
 	cmd.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "apply without an interactive confirmation")
 	cmd.Flags().IntVar(&opts.StripComponents, "strip-components", 0, "remove leading path components from archive entries")
 	return cmd
@@ -119,19 +121,37 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 	if err != nil {
 		return bundle.Record{}, false, err
 	}
+	if opts.FullSnapshot {
+		cfg, err := config.LoadProject(root)
+		if err != nil {
+			return bundle.Record{}, false, err
+		}
+		if err := bundle.PrepareFullSnapshot(root, &plan, cfg.Sync.Exclude); err != nil {
+			return bundle.Record{}, false, err
+		}
+		if !plan.SnapshotExisted {
+			fmt.Fprintln(cmd.OutOrStdout(), "! First full snapshot: recording managed files; unknown existing files are preserved")
+		}
+	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Update   %s\n", plan.Archive)
 	fmt.Fprintf(cmd.OutOrStdout(), "Added    %d\n", len(plan.Added))
 	fmt.Fprintf(cmd.OutOrStdout(), "Modified %d\n", len(plan.Modified))
 	fmt.Fprintf(cmd.OutOrStdout(), "Unchanged %d\n", len(plan.Unchanged))
+	if opts.FullSnapshot {
+		fmt.Fprintf(cmd.OutOrStdout(), "Deleted  %d\n", len(plan.Deleted))
+	}
 	for _, path := range plan.Added {
 		fmt.Fprintf(cmd.OutOrStdout(), "  + %s\n", path)
 	}
 	for _, path := range plan.Modified {
 		fmt.Fprintf(cmd.OutOrStdout(), "  ~ %s\n", path)
 	}
+	for _, path := range plan.Deleted {
+		fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", path)
+	}
 
-	if len(plan.Added) == 0 && len(plan.Modified) == 0 {
+	if len(plan.Added) == 0 && len(plan.Modified) == 0 && len(plan.Deleted) == 0 && !opts.FullSnapshot {
 		fmt.Fprintln(cmd.OutOrStdout(), "✓ No local changes required")
 		return bundle.Record{}, true, nil
 	}

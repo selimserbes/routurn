@@ -13,6 +13,7 @@ func newUpdateCmd() *cobra.Command {
 	var dryRun bool
 	var yes bool
 	var keepSource bool
+	var fullSnapshot bool
 	var stripComponents int
 
 	cmd := &cobra.Command{
@@ -74,6 +75,7 @@ func newUpdateCmd() *cobra.Command {
 			if dryRun {
 				_, _, err := applyBundle(cmd, ctx.Resolved.Root, archive, applyOptions{
 					DryRun:          true,
+					FullSnapshot:    fullSnapshot,
 					Yes:             true,
 					StripComponents: effectiveStrip,
 				})
@@ -103,6 +105,7 @@ func newUpdateCmd() *cobra.Command {
 
 			record, applied, err := applyBundle(cmd, ctx.Resolved.Root, imported.Path, applyOptions{
 				Yes:             yes,
+				FullSnapshot:    fullSnapshot,
 				StripComponents: effectiveStrip,
 				ManagedHash:     imported.Hash,
 				ManagedName:     name,
@@ -116,7 +119,11 @@ func newUpdateCmd() *cobra.Command {
 			if !applied || record.ID == "" {
 				return nil
 			}
-			finishUpdateSource(cmd, archive, imported, keepSource)
+			if len(record.Added) == 0 && len(record.Modified) == 0 && len(record.Deleted) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "✓ Full-snapshot ownership recorded; original archive retained (no file changes)")
+			} else {
+				finishUpdateSource(cmd, archive, imported, keepSource)
+			}
 			_, _ = retention.PruneProject(ctx.Resolved.Root, retention.DefaultRuns, retention.DefaultUpdates, false)
 			_ = intake.PruneDefault()
 			return nil
@@ -126,6 +133,7 @@ func newUpdateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what the selected update would change without importing or applying it")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "apply without an interactive confirmation")
 	cmd.Flags().BoolVar(&keepSource, "keep-source", false, "keep the original archive after verified import")
+	cmd.Flags().BoolVar(&fullSnapshot, "full-snapshot", false, "complete source snapshot; prune only previously tracked unchanged files")
 	cmd.Flags().IntVar(&stripComponents, "strip-components", 0, "remove leading path components from archive entries")
 	return cmd
 }

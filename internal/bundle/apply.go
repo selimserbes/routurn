@@ -21,10 +21,22 @@ func Apply(root string, plan Plan) (Record, error) {
 	record := Record{
 		ID: id, Archive: plan.Archive, AppliedAt: nowRFC3339(),
 		Added: append([]string(nil), plan.Added...), Modified: append([]string(nil), plan.Modified...),
+		Deleted: append([]string(nil), plan.Deleted...), FullSnapshot: plan.FullSnapshot, HadSnapshot: plan.SnapshotExisted,
 	}
-	if len(plan.Modified) > 0 {
+	if plan.FullSnapshot {
+		if err := checkSnapshotPreconditions(root, plan); err != nil {
+			return Record{}, err
+		}
+		if plan.SnapshotExisted {
+			if err := os.WriteFile(filepath.Join(updateDir, "previous-snapshot.json"), plan.SnapshotBefore, 0o600); err != nil {
+				return Record{}, err
+			}
+		}
+	}
+	backupPaths := append(append([]string(nil), plan.Modified...), plan.Deleted...)
+	if len(backupPaths) > 0 {
 		backup := filepath.Join(updateDir, "backup.tar")
-		if err := createBackup(root, backup, plan.Modified); err != nil {
+		if err := createBackup(root, backup, backupPaths); err != nil {
 			return Record{}, err
 		}
 		record.Backup = filepath.ToSlash(filepath.Join(".routurn", "updates", id, "backup.tar"))
@@ -40,12 +52,47 @@ func Apply(root string, plan Plan) (Record, error) {
 			continue
 		}
 		if err := writeEntryAtomic(root, entry); err != nil {
-			_ = restore(root, updateDir, record, applied)
-			return Record{}, fmt.Errorf("apply %s: %w", entry.Path, err)
+			return Record{}, failedApply(root, updateDir, record, applied, fmt.Errorf("apply %s: %w", entry.Path, err))
 		}
 		applied = append(applied, entry.Path)
 	}
+	for _, rel := range plan.Deleted {
+		// Check again immediately before removal: never delete a path that
+		// changed or became a symlink after the dry-run/confirmation.
+		if err := checkDeleteHash(root, rel, plan.DeleteHashes[rel]); err != nil {
+			return Record{}, failedApply(root, updateDir, record, applied, fmt.Errorf("remove obsolete %s: %w", rel, err))
+		}
+		full, err := safeLocalTarget(root, rel)
+		if err == nil {
+			err = os.Remove(full)
+		}
+		if err != nil {
+			return Record{}, failedApply(root, updateDir, record, applied, fmt.Errorf("remove obsolete %s: %w", rel, err))
+		}
+	}
+	if plan.FullSnapshot {
+		if err := saveSnapshot(root, plan.SnapshotFiles); err != nil {
+			return Record{}, failedApply(root, updateDir, record, applied, fmt.Errorf("save full-snapshot ownership: %w", err))
+		}
+		for _, rel := range plan.Deleted {
+			removeEmptyAncestors(root, rel)
+		}
+	}
 	return record, nil
+}
+
+// failedApply restores project contents and ownership. If automatic recovery
+// fails, the backup and record are left in place for manual inspection.
+func failedApply(root, updateDir string, record Record, applied []string, cause error) error {
+	if err := restore(root, updateDir, record, applied); err != nil {
+		return fmt.Errorf("%w; automatic recovery also failed: %v (backup: %s)", cause, err, updateDir)
+	}
+	record.RolledBack = true
+	record.RollbackAt = nowRFC3339()
+	if err := writeRecord(updateDir, record); err != nil {
+		return fmt.Errorf("%w; recovery succeeded but failed to record it: %v", cause, err)
+	}
+	return cause
 }
 
 func Rollback(root, id string) (Record, error) {
@@ -57,7 +104,7 @@ func Rollback(root, id string) (Record, error) {
 	if record.RolledBack {
 		return record, fmt.Errorf("update %s is already rolled back", id)
 	}
-	paths := append(append([]string{}, record.Added...), record.Modified...)
+	paths := append(append(append([]string{}, record.Added...), record.Modified...), record.Deleted...)
 	if err := restore(root, updateDir, record, paths); err != nil {
 		return Record{}, err
 	}
@@ -171,7 +218,7 @@ func restore(root, updateDir string, record Record, applied []string) error {
 		}
 	}
 	if record.Backup == "" {
-		return nil
+		return restoreSnapshot(root, updateDir, record)
 	}
 	f, err := os.Open(filepath.Join(updateDir, "backup.tar"))
 	if err != nil {
@@ -199,7 +246,7 @@ func restore(root, updateDir string, record Record, applied []string) error {
 			return err
 		}
 	}
-	return nil
+	return restoreSnapshot(root, updateDir, record)
 }
 
 func writeRecord(dir string, record Record) error {
