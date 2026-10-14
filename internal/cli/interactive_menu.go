@@ -48,7 +48,7 @@ type terminalKeys struct {
 }
 
 func openTerminalKeys(cmd *cobra.Command) *terminalKeys {
-	if !pickerIsInteractiveTerminal(cmd) || runtime.GOOS == "windows" {
+	if !pickerIsInteractiveTerminal(cmd) || runtime.GOOS == "windows" || os.Getenv("TERM") == "" || os.Getenv("TERM") == "dumb" {
 		return nil
 	}
 	f, ok := cmd.InOrStdin().(*os.File)

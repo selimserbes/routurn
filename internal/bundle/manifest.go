@@ -18,6 +18,7 @@ type Manifest struct {
 
 type ManifestBundle struct {
 	Name string `toml:"name" json:"name"`
+	Mode string `toml:"mode,omitempty" json:"mode,omitempty"` // optional: "full" or "partial"
 }
 
 type ManifestProject struct {
@@ -60,6 +61,12 @@ func SplitManifest(entries []Entry) (*Manifest, []Entry, error) {
 			return nil, nil, fmt.Errorf("unsupported bundle manifest schema %d", parsed.Schema)
 		}
 		parsed.Bundle.Name = strings.TrimSpace(parsed.Bundle.Name)
+		parsed.Bundle.Mode = strings.ToLower(strings.TrimSpace(parsed.Bundle.Mode))
+		switch parsed.Bundle.Mode {
+		case "", "partial", "full":
+		default:
+			return nil, nil, fmt.Errorf("invalid bundle mode %q: expected full or partial", parsed.Bundle.Mode)
+		}
 		parsed.Project.Name = strings.TrimSpace(parsed.Project.Name)
 		parsed.Base.Fingerprint = strings.TrimSpace(parsed.Base.Fingerprint)
 		manifest = &parsed

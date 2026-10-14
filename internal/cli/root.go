@@ -25,7 +25,7 @@ func Execute(version string) error {
 				fmt.Fprintln(cmd.OutOrStdout(), version)
 				return nil
 			}
-			return cmd.Help()
+			return runHomeMenu(cmd)
 		},
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			remote.SetVerbose(verbose, cmd.ErrOrStderr())

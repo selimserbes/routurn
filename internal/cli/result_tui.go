@@ -2,10 +2,12 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	resultstore "github.com/selimserbes/routurn/internal/result"
@@ -13,50 +15,77 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Inspect Routurn's private result metadata, rather than assuming that the
-// project's public results/ directory is owned by Routurn.
-func chooseResultTTY(cmd *cobra.Command, root, projectName string) (string, error) {
-	var names []string
+var errNoResultEntries = errors.New("no recorded runs or materialized results")
+
+type resultChoice struct {
+	Task        string
+	HasArtifact bool
+	LatestRun   runstate.Manifest
+	HasRun      bool
+}
+
+// The interactive result picker includes ordinary run history, even if a task
+// didn't produce artifact files. It never treats the project's public results/
+// directory as Routurn-owned without checking private metadata.
+func chooseResultTTY(cmd *cobra.Command, root, projectName string) (resultChoice, error) {
+	var choices []resultChoice
 	var err error
 	var discoveryDuration time.Duration
 	withPickerLoading(cmd.OutOrStdout(), pickerIsInteractiveTerminal(cmd), "Finding available results...", func() {
 		start := time.Now()
-		names, err = listResultTaskNames(root)
+		choices, err = listResultChoices(root)
 		discoveryDuration = time.Since(start)
 	})
 	defer func() {
 		pickerReportTiming(cmd.ErrOrStderr(), "result", pickerTiming{"result-scan", discoveryDuration})
 	}()
 	if err != nil {
-		return "", err
+		return resultChoice{}, err
+	}
+	if len(choices) == 0 {
+		return resultChoice{}, errNoResultEntries
 	}
 	m := interactiveMenu{Heading: "Select a result", ConfirmHint: "View selected result"}
-	for _, name := range names {
-		m.Items = append(m.Items, interactiveMenuItem{Label: name, Detail: "latest artifact"})
+	for _, choice := range choices {
+		detail := "latest artifact"
+		if choice.HasRun {
+			detail = strings.ToLower(choice.LatestRun.Status)
+			if choice.HasArtifact {
+				detail += " · files available"
+			} else {
+				detail += " · no artifact files"
+			}
+		}
+		m.Items = append(m.Items, interactiveMenuItem{Label: choice.Task, Detail: detail})
 	}
 	selected, err := chooseInteractiveMenu(cmd, projectName, m)
 	if err != nil {
-		return "", err
+		return resultChoice{}, err
 	}
 	if selected.Index < 0 {
-		return "", fmt.Errorf("result selection cancelled")
+		return resultChoice{}, fmt.Errorf("result selection cancelled")
 	}
-	return names[selected.Index], nil
+	return choices[selected.Index], nil
 }
 
-func listResultTaskNames(root string) ([]string, error) {
+func listResultChoices(root string) ([]resultChoice, error) {
+	runs, err := runstate.List(root)
+	if err != nil {
+		return nil, err
+	}
+
+	available := map[string]bool{}
 	base := filepath.Join(root, ".routurn", "results")
 	entries, err := os.ReadDir(base)
-	if err != nil {
-		return nil, fmt.Errorf("no materialized results yet: %w", err)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
 	}
-	available := map[string]bool{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		data, e := os.ReadFile(filepath.Join(base, entry.Name(), "result.json"))
-		if e != nil {
+		data, err := os.ReadFile(filepath.Join(base, entry.Name(), "result.json"))
+		if err != nil {
 			continue
 		}
 		var meta resultstore.Metadata
@@ -64,17 +93,20 @@ func listResultTaskNames(root string) ([]string, error) {
 			available[meta.Task] = true
 		}
 	}
-	if len(available) == 0 {
-		return nil, fmt.Errorf("no materialized results yet; run a task with artifacts first")
-	}
-	names := make([]string, 0, len(available))
+
+	choices := make([]resultChoice, 0, len(runs)+len(available))
 	seen := map[string]bool{}
-	runs, _ := runstate.List(root)
 	for _, run := range runs {
-		if available[run.Task] && !seen[run.Task] {
-			names = append(names, run.Task)
-			seen[run.Task] = true
+		if run.Task == "" || seen[run.Task] {
+			continue
 		}
+		choices = append(choices, resultChoice{
+			Task:        run.Task,
+			HasArtifact: available[run.Task],
+			LatestRun:   run,
+			HasRun:      true,
+		})
+		seen[run.Task] = true
 	}
 	var rest []string
 	for name := range available {
@@ -83,6 +115,8 @@ func listResultTaskNames(root string) ([]string, error) {
 		}
 	}
 	sort.Strings(rest)
-	names = append(names, rest...)
-	return names, nil
+	for _, name := range rest {
+		choices = append(choices, resultChoice{Task: name, HasArtifact: true})
+	}
+	return choices, nil
 }

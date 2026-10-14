@@ -122,7 +122,9 @@ func newUpdateCmd() *cobra.Command {
 			if len(record.Added) == 0 && len(record.Modified) == 0 && len(record.Deleted) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "✓ Full-snapshot ownership recorded; original archive retained (no file changes)")
 			} else {
-				finishUpdateSource(cmd, archive, imported, keepSource)
+				// Selecting an archive in the TUI must not unexpectedly consume a
+				// file from Downloads. Explicit CLI paths keep their old behavior.
+				finishUpdateSource(cmd, archive, imported, keepSource || (len(args) == 0 && !recent))
 			}
 			_, _ = retention.PruneProject(ctx.Resolved.Root, retention.DefaultRuns, retention.DefaultUpdates, false)
 			_ = intake.PruneDefault()

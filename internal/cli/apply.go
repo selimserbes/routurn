@@ -62,6 +62,10 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 		return bundle.Record{}, false, err
 	}
 	manifest := inspection.Manifest
+	// Automatic pruning is deliberately proof-based. A self-declared full
+	// archive is not enough: it must name this project AND attest to its
+	// exact current base fingerprint. Otherwise preserve old files.
+	autoFullSnapshot := false
 	if manifest != nil {
 		cfg, cfgErr := config.LoadProject(root)
 		if cfgErr != nil {
@@ -110,6 +114,14 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 			}
 		}
 
+		if !opts.FullSnapshot && manifest.Bundle.Mode == "full" {
+			if !projectNameDiffers && manifest.Project.Name != "" && exactMatch {
+				autoFullSnapshot = true
+				fmt.Fprintln(cmd.OutOrStdout(), "✓ Verified complete-source bundle; automatic obsolete-file cleanup enabled")
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "! Full-source declaration not fully verified; preserving old files (safe partial update)")
+			}
+		}
 		if projectNameDiffers {
 			if !exactMatch && !scopedMatch {
 				return bundle.Record{}, false, fmt.Errorf("update declares project %q, current project is %q, and no matching base state verifies that it is safe here", manifest.Project.Name, cfg.Name)
@@ -117,11 +129,12 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 			fmt.Fprintf(cmd.OutOrStdout(), "! Bundle project name %q differs from current project %q; verified base state matches, continuing safely\n", manifest.Project.Name, cfg.Name)
 		}
 	}
+	fullSnapshot := opts.FullSnapshot || autoFullSnapshot
 	plan, err := bundle.BuildPlan(root, archive, opts.StripComponents)
 	if err != nil {
 		return bundle.Record{}, false, err
 	}
-	if opts.FullSnapshot {
+	if fullSnapshot {
 		cfg, err := config.LoadProject(root)
 		if err != nil {
 			return bundle.Record{}, false, err
@@ -138,7 +151,7 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 	fmt.Fprintf(cmd.OutOrStdout(), "Added    %d\n", len(plan.Added))
 	fmt.Fprintf(cmd.OutOrStdout(), "Modified %d\n", len(plan.Modified))
 	fmt.Fprintf(cmd.OutOrStdout(), "Unchanged %d\n", len(plan.Unchanged))
-	if opts.FullSnapshot {
+	if fullSnapshot {
 		fmt.Fprintf(cmd.OutOrStdout(), "Deleted  %d\n", len(plan.Deleted))
 	}
 	for _, path := range plan.Added {
@@ -151,7 +164,7 @@ func applyBundle(cmd *cobra.Command, root, archive string, opts applyOptions) (b
 		fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", path)
 	}
 
-	if len(plan.Added) == 0 && len(plan.Modified) == 0 && len(plan.Deleted) == 0 && !opts.FullSnapshot {
+	if len(plan.Added) == 0 && len(plan.Modified) == 0 && len(plan.Deleted) == 0 && !fullSnapshot {
 		fmt.Fprintln(cmd.OutOrStdout(), "✓ No local changes required")
 		return bundle.Record{}, true, nil
 	}

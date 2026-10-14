@@ -232,7 +232,9 @@ func pickerPageBounds(total, page int) (start, end, actual, pages int) {
 func pickerIsInteractiveTerminal(cmd *cobra.Command) bool {
 	input, inputOK := cmd.InOrStdin().(*os.File)
 	output, outputOK := cmd.OutOrStdout().(*os.File)
-	if !inputOK || !outputOK || os.Getenv("TERM") == "" || os.Getenv("TERM") == "dumb" {
+	// Windows consoles and minimal shells may not set TERM, but can still
+	// support the line-based menus. Detect terminal attachment, not color.
+	if !inputOK || !outputOK {
 		return false
 	}
 	inInfo, inErr := input.Stat()

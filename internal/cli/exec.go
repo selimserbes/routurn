@@ -113,6 +113,20 @@ func newExecCmd() *cobra.Command {
 				}
 			}
 
+			// A simple interactive `routurn exec` can offer exactly one pending,
+			// verifiably compatible update. It never picks an ambiguous ZIP or
+			// silently modifies files before showing the normal update plan.
+			autoOfferedUpdate := false
+			if interactiveChoice && effectiveUpdateSpec == "" && legacyArchive == "" && pickerIsInteractiveTerminal(cmd) {
+				candidate, candidateErr := offerUpdateBeforeTask(cmd, ctx)
+				if candidateErr != nil {
+					return candidateErr
+				}
+				if candidate != "" {
+					effectiveUpdateSpec = candidate
+					autoOfferedUpdate = true
+				}
+			}
 			hasUpdate := legacyArchive != "" || effectiveUpdateSpec != ""
 			if fullSnapshot && !hasUpdate {
 				return fmt.Errorf("--full-snapshot requires an update archive")
@@ -203,7 +217,7 @@ func newExecCmd() *cobra.Command {
 				}
 				if applied && record.ID != "" && originalArchive != "" {
 					if len(record.Added)+len(record.Modified)+len(record.Deleted) > 0 {
-						finishUpdateSource(cmd, originalArchive, importedUpdate, keepUpdateSource)
+						finishUpdateSource(cmd, originalArchive, importedUpdate, keepUpdateSource || autoOfferedUpdate)
 					}
 				}
 				updateID = record.ID
