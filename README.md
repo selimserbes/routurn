@@ -579,11 +579,15 @@ terminal.
 `routurn update` finds and inspects archives, maps wrapped archive roots,
 checks compatibility, shows the planned file changes, and asks before writing.
 Only a complete-source bundle with a matching project name and an exact
-verified base fingerprint enables automatic obsolete-file pruning. Ordinary
-ZIPs and unverifiable bundles remain non-deleting; a ZIP's file list alone
-cannot prove whether it is complete or partial. Interactive archive selection
-preserves the original download. The managed copy and rollback history remain
-separate.
+verified base fingerprint enables **automatic** obsolete-file pruning. For a
+manifestless ZIP chosen interactively, Routurn instead asks whether it contains
+the complete intended project source. The non-deleting option is selected by default. Users can choose **Complete
+project source** in the interactive menu to review full-snapshot planning,
+which may remove solely previously tracked, unchanged obsolete files. The
+resulting `Deleted` list is shown before a separate apply confirmation. A ZIP's
+file list alone never proves it is complete; noninteractive updates and `--yes`
+remain non-deleting by default. Interactive selection preserves the original
+download. The managed copy and rollback history remain separate.
 
 After choosing a task through `routurn exec`, Routurn may offer exactly one
 pending, verifiably compatible update before the normal sync/run/fetch steps.
