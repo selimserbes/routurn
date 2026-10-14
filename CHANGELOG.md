@@ -5,11 +5,16 @@ The project follows Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-14
+
 ### Added
 - Opt-in `--full-snapshot` for complete update archives: track managed source
   files, preview obsolete files, safely remove only unchanged previously
   managed files, and restore removed files with rollback. Partial archives
   keep the original non-deleting behavior.
+
+### Fixed
+- Select the most recent update using precise application timestamps for reliable rollback ordering. Reject ambiguous legacy update ordering instead of choosing an arbitrary rollback target.
 
 ## [1.0.0] - 2026-10-13
 
@@ -23,5 +28,6 @@ The project follows Semantic Versioning.
 - Evidence-based detection of nested archive roots and fail-closed handling of ambiguous updates.
 - Linux, macOS and Windows client builds, checksums, and shell completion support.
 
-[Unreleased]: https://github.com/selimserbes/routurn/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/selimserbes/routurn/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/selimserbes/routurn/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/selimserbes/routurn/releases/tag/v1.0.0
