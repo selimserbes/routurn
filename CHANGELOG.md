@@ -5,6 +5,18 @@ The project follows Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-14
+
+### Added
+- Guided home menu for task execution, project updates, results, and rollback.
+- Automatic recognition of verified, compatible complete-source update bundles.
+- Optional review of compatible updates before task execution.
+- Interactive rollback selection without requiring an update ID.
+
+### Improved
+- Show successful and failed task history in the results menu, including runs without collected artifacts.
+- Preserve safe non-deleting behavior for archives whose complete-source status cannot be verified.
+
 ## [1.1.0] - 2026-10-14
 
 ### Added
@@ -28,6 +40,7 @@ The project follows Semantic Versioning.
 - Evidence-based detection of nested archive roots and fail-closed handling of ambiguous updates.
 - Linux, macOS and Windows client builds, checksums, and shell completion support.
 
-[Unreleased]: https://github.com/selimserbes/routurn/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/selimserbes/routurn/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/selimserbes/routurn/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/selimserbes/routurn/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/selimserbes/routurn/releases/tag/v1.0.0
