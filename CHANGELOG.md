@@ -5,6 +5,18 @@ The project follows Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-14
+
+### Added
+- Guided update-type selection for ZIP archives whose completeness cannot be verified.
+- Safe non-deleting partial update as the default interactive choice.
+- Complete-source review with a preview of obsolete managed-file removals.
+
+### Improved
+- Preserve automatic handling of verified complete-source bundles.
+- Require deliberate selection and separate confirmation before applying changes that remove files.
+- Preserve existing noninteractive update behavior and rollback support.
+
 ## [1.2.0] - 2026-10-14
 
 ### Added
@@ -40,7 +52,8 @@ The project follows Semantic Versioning.
 - Evidence-based detection of nested archive roots and fail-closed handling of ambiguous updates.
 - Linux, macOS and Windows client builds, checksums, and shell completion support.
 
-[Unreleased]: https://github.com/selimserbes/routurn/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/selimserbes/routurn/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/selimserbes/routurn/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/selimserbes/routurn/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/selimserbes/routurn/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/selimserbes/routurn/releases/tag/v1.0.0
