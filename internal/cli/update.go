@@ -1,7 +1,12 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"os"
+	"runtime"
+	"strings"
 
 	"github.com/selimserbes/routurn/internal/intake"
 	"github.com/selimserbes/routurn/internal/retention"
@@ -65,7 +70,13 @@ func newUpdateCmd() *cobra.Command {
 				return err
 			}
 			if manifest == nil {
-				fmt.Fprintln(cmd.OutOrStdout(), "! Legacy update: no routurn-bundle.toml; project/base identity cannot be verified")
+				fmt.Fprintln(cmd.OutOrStdout(), "! Archive type cannot be verified automatically; review the update scope")
+				if shouldOfferLegacyFullSnapshot(len(args) == 0 && !recent, dryRun, yes, fullSnapshot) {
+					fullSnapshot, err = confirmLegacyFullSnapshot(cmd)
+					if err != nil {
+						return err
+					}
+				}
 			} else if compatibility == updateCompatibilityScoped {
 				fmt.Fprintln(cmd.OutOrStdout(), "✓ Bundle target-file preconditions match; unrelated project changes are allowed")
 			} else if compatibility == updateCompatibilityUnverified {
@@ -138,4 +149,60 @@ func newUpdateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&fullSnapshot, "full-snapshot", false, "complete source snapshot; prune only previously tracked unchanged files")
 	cmd.Flags().IntVar(&stripComponents, "strip-components", 0, "remove leading path components from archive entries")
 	return cmd
+}
+
+// An ordinary archive cannot prove whether it is a full or partial source update.
+// Ask only in the interactive archive-picker path; scripted/explicit-path
+// workflows and --yes retain their previous non-deleting defaults.
+func shouldOfferLegacyFullSnapshot(picker, dryRun, yes, fullSnapshot bool) bool {
+	return picker && !dryRun && !yes && !fullSnapshot
+}
+
+func confirmLegacyFullSnapshot(cmd *cobra.Command) (bool, error) {
+	fmt.Fprintln(cmd.OutOrStdout(), "! Routurn cannot verify whether this ZIP is a complete project or a partial update.")
+
+	// The shared TUI is used on a normal Unix terminal. Default focus is the
+	// non-deleting option; the user must move to option 2 and press Enter to
+	// authorize considering deletions. Other terminals use numbered choices.
+	if pickerIsInteractiveTerminal(cmd) && runtime.GOOS != "windows" && os.Getenv("TERM") != "" && os.Getenv("TERM") != "dumb" {
+		selection, err := chooseInteractiveMenu(cmd, "Update type", interactiveMenu{
+			Heading: "What does this ZIP contain?",
+			Items: []interactiveMenuItem{
+				{Label: "Keep existing files (safe default)", Detail: "Partial update; no deletions"},
+				{Label: "Complete project source", Detail: "Review removal of obsolete managed files"},
+			},
+			ConfirmHint: "Review selected update type",
+		})
+		if err != nil {
+			return false, err
+		}
+		if selection.Index < 0 {
+			return false, fmt.Errorf("update cancelled")
+		}
+		if selection.Index == 1 {
+			fmt.Fprintln(cmd.OutOrStdout(), "! Full-source review selected: check the Deleted list before applying")
+			return true, nil
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "✓ Safe partial update selected: no obsolete-file deletion")
+		return false, nil
+	}
+
+	// Keep a deterministic choice for line-based inputs and on Windows.
+	// readMenuLine consumes only one line, leaving the later apply answer intact.
+	fmt.Fprintln(cmd.OutOrStdout(), "  1) Keep existing files (safe default; no deletions)")
+	fmt.Fprintln(cmd.OutOrStdout(), "  2) Complete project source (review managed-file deletions)")
+	fmt.Fprint(cmd.OutOrStdout(), "Choose [1]: ")
+	answer, err := readMenuLine(cmd.InOrStdin())
+	if err != nil && answer == "" {
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+		return false, err
+	}
+	if strings.TrimSpace(answer) == "2" {
+		fmt.Fprintln(cmd.OutOrStdout(), "! Full-source review selected: check the Deleted list before applying")
+		return true, nil
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "✓ Safe partial update selected: no obsolete-file deletion")
+	return false, nil
 }
