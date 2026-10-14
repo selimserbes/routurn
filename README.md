@@ -515,7 +515,7 @@ Interactive discovery is intentionally bounded but user-visible. Routurn checks 
 
 ### Managed ownership and download cleanup
 
-`routurn update` imports the selected archive into Routurn-managed persistent storage before applying it. The copy is verified by SHA-256. After the managed copy is safely registered, the original selected archive is removed by default so browser downloads such as `update.zip`, `update (1).zip`, and `update (2).zip` do not accumulate indefinitely.
+`routurn update` imports the selected archive into Routurn-managed persistent storage before applying it. The copy is verified by SHA-256. After the managed copy is safely registered, an archive provided by an explicit CLI path may be removed after a successful update (unless `--keep-source` is used). When selecting a file from the interactive `routurn update` menu, Routurn preserves the original archive by default. No source archive is removed on a dry-run, cancellation, or no-op.
 
 Use `--keep-source` when the original archive should remain in place:
 
@@ -529,9 +529,17 @@ Managed bundles use content-addressed storage under the platform's user data dir
 
 ### Full-source snapshots and obsolete files
 
-By default, updates **never delete project files** merely because an archive
-omits them. This protects partial patches. For an archive representing a
-**complete source snapshot**, explicitly opt in:
+Ordinary updates **never delete project files** merely because an archive
+omits them. This protects partial patches. Routurn can automatically select
+full-source mode when the bundle manifest explicitly declares `mode = "full"`,
+identifies the current project, and provides an **exact matching base
+fingerprint**. The plan still lists deletions for confirmation. If any of this
+proof is absent, Routurn uses a safe non-deleting update instead. If a
+specified base fingerprint contradicts the current project, the update is
+rejected rather than guessed.
+
+Power users can still explicitly opt into full-source mode for a complete
+archive they have inspected:
 
 ```bash
 routurn update /path/to/full-project.zip --full-snapshot --dry-run
@@ -556,6 +564,40 @@ state/configuration, common dependency/build environments, and configured
 sync excludes are never automatically deleted. Empty directories left behind by
 removed files are cleaned up only when empty.
 The source ZIP is preserved on a dry-run or a tracking-only update.
+
+### One-command interactive workflows
+
+On an interactive terminal, `routurn` opens the home menu. The everyday
+commands are `routurn update`, `routurn exec`, `routurn result`, and
+`routurn rollback`; users do not have to provide task names or archive paths to
+open their respective menus. `routurn rollback` offers the **most recent**
+rollback-safe update by default, while explicitly specified IDs remain
+available to advanced users. Noninteractive callers should supply explicit
+arguments, and `routurn` alone continues to display help when stdin is not a
+terminal.
+
+`routurn update` finds and inspects archives, maps wrapped archive roots,
+checks compatibility, shows the planned file changes, and asks before writing.
+Only a complete-source bundle with a matching project name and an exact
+verified base fingerprint enables automatic obsolete-file pruning. Ordinary
+ZIPs and unverifiable bundles remain non-deleting; a ZIP's file list alone
+cannot prove whether it is complete or partial. Interactive archive selection
+preserves the original download. The managed copy and rollback history remain
+separate.
+
+After choosing a task through `routurn exec`, Routurn may offer exactly one
+pending, verifiably compatible update before the normal sync/run/fetch steps.
+The user can decline and run the task unchanged. If multiple updates might
+apply, Routurn does not guess; use `routurn update` to choose. No update is
+silently applied. An imported bundle already applied to the project is not
+offered again unless it has been rolled back.
+
+Bundle producers can opt into this automatic full-source detection using the
+existing `routurn-bundle.toml` manifest. Under `[bundle]`, set `mode = "full"`
+(or `mode = "partial"` for a partial patch), and provide the receiving
+project's identity and exact base fingerprint. The recipient does not have to
+supply `--full-snapshot`; the project state must actually match at apply time.
+An invalid mode is rejected.
 
 ### Bundle identity and compatibility
 

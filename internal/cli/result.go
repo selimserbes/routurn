@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io"
 
 	resultstore "github.com/selimserbes/routurn/internal/result"
+	"github.com/selimserbes/routurn/internal/runstate"
 	"github.com/spf13/cobra"
 )
 
@@ -25,12 +28,22 @@ func newResultCmd() *cobra.Command {
 				return err
 			}
 			taskName := ""
+			var selected resultChoice
 			if len(args) > 0 {
 				taskName = args[0]
 			} else if pickerIsInteractiveTerminal(cmd) {
-				taskName, err = chooseResultTTY(cmd, ctx.Resolved.Root, ctx.Resolved.Config.Name)
+				selected, err = chooseResultTTY(cmd, ctx.Resolved.Root, ctx.Resolved.Config.Name)
+				if errors.Is(err, errNoResultEntries) {
+					fmt.Fprintln(cmd.OutOrStdout(), "No runs or results recorded yet. Run 'routurn exec' to get started.")
+					return nil
+				}
 				if err != nil {
 					return err
+				}
+				taskName = selected.Task
+				if !selected.HasArtifact && selected.HasRun {
+					printRunOnlyResult(cmd.OutOrStdout(), selected.LatestRun)
+					return nil
 				}
 			} else {
 				return fmt.Errorf("result requires a task name in noninteractive mode: routurn result <task>")
@@ -49,6 +62,9 @@ func newResultCmd() *cobra.Command {
 			for _, file := range meta.Files {
 				fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", file)
 			}
+			if selected.HasRun && selected.LatestRun.ID != meta.RunID {
+				fmt.Fprintf(cmd.OutOrStdout(), "Notice  Saved files are from run %s; newest run %s is %s\n", meta.RunID, selected.LatestRun.ID, selected.LatestRun.Status)
+			}
 			if verbose {
 				fmt.Fprintf(cmd.OutOrStdout(), "Run     %s\n", meta.RunID)
 				fmt.Fprintf(cmd.OutOrStdout(), "Store   %s\n", resultstore.Dir(ctx.Resolved.Root, taskName))
@@ -58,4 +74,20 @@ func newResultCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&pathOnly, "path", false, "print only the stable user-facing result path")
 	return cmd
+}
+
+// printRunOnlyResult is for the interactive result picker. Script-facing
+// `result TASK` and `result --path` retain their artifact-only semantics.
+func printRunOnlyResult(out io.Writer, run runstate.Manifest) {
+	fmt.Fprintf(out, "Task     %s\n", run.Task)
+	fmt.Fprintf(out, "Run      %s\n", run.ID)
+	fmt.Fprintf(out, "Status   %s\n", run.Status)
+	fmt.Fprintf(out, "Started  %s\n", run.StartedAt)
+	if run.FinishedAt != "" {
+		fmt.Fprintf(out, "Finished %s\n", run.FinishedAt)
+	}
+	if run.ExitCode != nil {
+		fmt.Fprintf(out, "Exit code %d\n", *run.ExitCode)
+	}
+	fmt.Fprintln(out, "Files    No artifacts collected for this task.")
 }

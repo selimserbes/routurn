@@ -10,15 +10,37 @@ import (
 
 func newRollbackCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "rollback <update-id|latest|previous>",
+		Use:   "rollback [update-id|latest|previous]",
 		Short: "Restore local files from a previous Routurn update backup",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resolved, err := project.Resolve(projectName)
-			if err != nil {
-				return err
+			var resolved *project.Resolved
+			var err error
+			if len(args) == 0 {
+				ctx, ctxErr := resolveLocalProjectContextForPicker(cmd)
+				if ctxErr != nil {
+					return ctxErr
+				}
+				resolved = ctx.Resolved
+			} else {
+				resolved, err = project.Resolve(projectName)
+				if err != nil {
+					return err
+				}
 			}
-			id, err := bundle.ResolveID(resolved.Root, args[0])
+			selection := ""
+			if len(args) > 0 {
+				selection = args[0]
+			} else {
+				if !pickerIsInteractiveTerminal(cmd) {
+					return fmt.Errorf("interactive rollback requires a terminal; specify an update ID or 'previous'")
+				}
+				selection, err = chooseRollbackTTY(cmd, resolved.Root, resolved.Config.Name)
+				if err != nil {
+					return err
+				}
+			}
+			id, err := bundle.ResolveID(resolved.Root, selection)
 			if err != nil {
 				return err
 			}
