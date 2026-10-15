@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -33,27 +32,17 @@ func newCompletionCmd(root *cobra.Command) *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:       "install <shell>",
-		Short:     "Print the recommended command for installing completion",
+		Short:     "Install shell completion for the current user",
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: []string{"bash", "zsh", "fish", "powershell"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			shell := args[0]
-			home, _ := os.UserHomeDir()
-			switch shell {
-			case "bash":
-				fmt.Fprintln(cmd.OutOrStdout(), "routurn completion bash > ~/.local/share/bash-completion/completions/routurn")
-			case "zsh":
-				fmt.Fprintf(cmd.OutOrStdout(), "mkdir -p %s/.zfunc && routurn completion zsh > %s/.zfunc/_routurn\n", home, home)
-			case "fish":
-				fmt.Fprintln(cmd.OutOrStdout(), "routurn completion fish > ~/.config/fish/completions/routurn.fish")
-			case "powershell":
-				fmt.Fprintln(cmd.OutOrStdout(), "routurn completion powershell | Out-String | Invoke-Expression")
-			default:
-				return fmt.Errorf("unsupported shell %q", shell)
+			installed, err := installShellCompletion(root, args[0])
+			if err != nil {
+				return err
 			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Installed %s completion: %s\nOpen a new terminal to activate it.\n", args[0], installed)
 			return nil
 		},
 	})
-
 	return cmd
 }

@@ -78,6 +78,21 @@ install -m 0755 "$TMP/routurn" "$INSTALL_DIR/routurn" 2>/dev/null || {
 echo "Installed: $INSTALL_DIR/routurn"
 "$INSTALL_DIR/routurn" --version
 
+# Install completions for available shells without administrator privileges.
+# Keep binary installation successful even if an individual shell profile is locked.
+if [ "${ROUTURN_SKIP_COMPLETIONS:-0}" != "1" ]; then
+    for shell in bash zsh fish; do
+        if command -v "$shell" >/dev/null 2>&1; then
+            "$INSTALL_DIR/routurn" completion install "$shell" || \
+                echo "Warning: could not install $shell completion" >&2
+        fi
+    done
+    if command -v pwsh >/dev/null 2>&1; then
+        "$INSTALL_DIR/routurn" completion install powershell || \
+            echo "Warning: could not install PowerShell completion" >&2
+    fi
+fi
+
 case ":${PATH:-}:" in
     *":$INSTALL_DIR:"*) ;;
     *) echo "Note: add $INSTALL_DIR to your PATH." ;;
