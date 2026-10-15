@@ -60,6 +60,7 @@ func Execute(version string) error {
 		newRunsCmd(),
 		newCleanCmd(),
 	)
+	configureDynamicCompletion(root)
 	return root.Execute()
 }
 

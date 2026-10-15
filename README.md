@@ -904,20 +904,32 @@ Routurn does not need to understand the programming language. It needs a project
 
 ## Shell completion
 
-Generate completion for your shell:
+Routurn supports command, flag, target, project and configured-task completion
+in Zsh, Bash, Fish and PowerShell. Suggestions are read from local state;
+completion never opens SSH connections or runs tasks.
 
-```bash
-routurn completion bash
-routurn completion zsh
-routurn completion fish
-routurn completion powershell
-```
+The Linux/macOS release installer sets up completion for installed shells.
+For other installation methods, or when adding a shell later, run once:
 
-To see the recommended installation command for a shell:
+    routurn completion install zsh
+    routurn completion install bash
+    routurn completion install fish
+    routurn completion install powershell
 
-```bash
-routurn completion install zsh
-```
+The installer writes user-level completion files. Oh My Zsh uses its custom
+completions directory without requiring `.zfunc` or changes to `.zshrc`.
+Standard Bash and Zsh setups receive an idempotent profile hook if needed;
+Fish reads its own completion directory and PowerShell loads the generated
+script through the user's profile. Open a new shell after installation.
+
+To print a completion script without installing it, use
+`routurn completion <bash|zsh|fish|powershell>`.
+
+Examples:
+
+    routurn target test <TAB>
+    routurn project show <TAB>
+    routurn -p example-project exec <TAB>
 
 ## Requirements
 
