@@ -22,6 +22,8 @@ func TestDynamicCompletionLocalOnly(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
 	projectDir := filepath.Join(home, "example")
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatal(err)

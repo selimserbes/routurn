@@ -12,6 +12,7 @@ import (
 func TestCompletionInstallUserPaths(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("ZSH", "")
 	t.Setenv("ZSH_CUSTOM", "")
 	root := &cobra.Command{Use: "routurn"}
